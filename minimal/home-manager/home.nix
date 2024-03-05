@@ -49,7 +49,7 @@ in
   home.packages = with pkgs; [
     foot
     tofi
-  };
+  ];
 
   # Add stuff for your user as you see fit:
   # programs.neovim.enable = true;
