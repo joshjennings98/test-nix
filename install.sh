@@ -10,6 +10,6 @@ export NIX_CONFIG="experimental-features = nix-command flakes"
 nix flake init -t github:joshjennings98/test-nix#minimal
 cp /etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
 sudo nixos-rebuild switch --flake .#Ganymede 
-nix shell nixpkgs#home-manager --run "home-manager switch --flake .#josh@Ganymede"
+nix-shell --packages home-manager --run "home-manager switch --flake .#josh@Ganymede"
 
 echo 'Installation complete. Reboot? [y/N]' && read val && [[ "$val" == "y" ]] && sudo reboot;
