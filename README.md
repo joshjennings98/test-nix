@@ -1,12 +1,16 @@
 # README
 
+This repo contains a NixOS configuration as well as a script to set it up. It does this using flakes.
+
+## Usage
+
+This sets up nix-os with the user being `josh` and the hostname being `Ganymede`. 
+
+It assumes the system is using grub with `boot.loader.grub.device = "/dev/sda"`.
+
+*Note: It will create the directory `nix-cfg`.*
+
 ```sh
-mkdir nix-cfg
-cd nix-cfg
-export NIX_CONFIG="experimental-features = nix-command flakes"
-nix flake init -t github:joshjennings98/test-nix#minimal
-cp /etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
-sudo nixos-rebuild switch --flake .#Ganymede 
-# how to get home manager to work without running the below command?
-nix-shell --packages home-manager --run "home-manager switch --flake .#josh@Ganymede"
+curl -o install.sh https://raw.githubusercontent.com/joshjennings98/test-nix/main/install.sh
+bash install.sh
 ```
