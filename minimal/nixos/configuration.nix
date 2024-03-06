@@ -85,6 +85,7 @@
       ];
       # TODO: Be sure to add any other groups you need (such as networkmanager, audio, docker, etc)
       extraGroups = ["networkmanager" "wheel"];
+      shell = pkgs.fish;
     };
   };
 
@@ -113,6 +114,7 @@
   };
 
   programs.sway.enable = true;
+  programs.fish.enable = true;
 
   environment.sessionVariables = rec {
     WLR_NO_HARDWARE_CURSORS = "1"; # for sway/wayland in virtualbox
