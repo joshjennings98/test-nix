@@ -47,7 +47,6 @@ in
   };
 
   home.packages = with pkgs; [
-    foot
     tofi
   ];
 
@@ -59,13 +58,23 @@ in
   programs.home-manager.enable = true;
   programs.git.enable = true;
 
+  programs.kitty = {
+    enable = true;
+    shellIntegration.enableFishIntegration = true;
+    theme = "Gruvbox Dark";
+  };
+
+  programs.fzf = {
+    enable = true;
+  };
+
   wayland = {
     windowManager.sway = {
         enable = true;
         systemd.enable = true;
         config = rec {
             modifier = "Mod1";
-            terminal = "foot";
+            terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty";
             # should I go back to the i3 style?
             menu = ''
                 tofi-run \
