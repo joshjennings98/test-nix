@@ -26,6 +26,7 @@
     self,
     nixpkgs,
     home-manager,
+    firefox-addons,
     ...
   } @ inputs: let
     inherit (self) outputs;
