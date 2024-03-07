@@ -1,11 +1,11 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   programs.firefox = {
     enable = true;
     profiles.josh = {
       bookmarks = { };
-      extensions = with pkgs.inputs.firefox-addons; [
+      extensions = with inputs.firefox-addons; [
         ublock-origin
       ];
       bookmarks = { };
