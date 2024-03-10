@@ -5,7 +5,7 @@
     enable = true;
     profiles.josh = {
       bookmarks = { };
-      https://discourse.nixos.org/t/firefox-extensions-with-home-manager/34108
+      // https://discourse.nixos.org/t/firefox-extensions-with-home-manager/34108
       extensions = with inputs.firefox-addons.packages.${pkgs.system}; [
         darkreader
         ublock-origin
