@@ -1,20 +1,13 @@
 {
-  description = "Your new nix config";
+  description = "Josh's NixOS Config";
 
   inputs = {
-    # Nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-23.11";
 
-    # Home manager
-    home-manager.url = "github:nix-community/home-manager/release-23.11";
-    home-manager.inputs.nixpkgs.follows = "nixpkgs";
-
-    # TODO: Add any other flake you might need
-    # hardware.url = "github:nixos/nixos-hardware";
-
-    # Shameless plug: looking for a way to nixify your themes and make
-    # everything match nicely? Try nix-colors!
-    # nix-colors.url = "github:misterio77/nix-colors";
+    home-manager = {
+      url = "github:nix-community/home-manager/release-23.11";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     firefox-addons = {
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
@@ -26,31 +19,28 @@
     self,
     nixpkgs,
     home-manager,
-    firefox-addons,
     ...
   } @ inputs: let
     inherit (self) outputs;
   in {
-    # NixOS configuration entrypoint
-    # Available through 'nixos-rebuild --flake .#your-hostname'
+    # Reload with 'nixos-rebuild --flake .#Ganymede'
     nixosConfigurations = {
-      # FIXME replace with your hostname
       Ganymede = nixpkgs.lib.nixosSystem {
-        specialArgs = {inherit inputs outputs;};
-        # > Our main nixos configuration file <
-        modules = [./nixos/configuration.nix];
+        specialArgs = { inherit inputs outputs; };
+        modules = [
+          ./nixos/configuration.nix
+        ];
       };
     };
 
-    # Standalone home-manager configuration entrypoint
-    # Available through 'home-manager --flake .#your-username@your-hostname'
+    # Reload with 'home-manager --flake .#josh@Ganymede'
     homeConfigurations = {
-      # FIXME replace with your username@hostname
       "josh@Ganymede" = home-manager.lib.homeManagerConfiguration {
         pkgs = nixpkgs.legacyPackages.x86_64-linux; # Home-manager requires 'pkgs' instance
-        extraSpecialArgs = {inherit inputs outputs;};
-        # > Our main home-manager configuration file <
-        modules = [./home-manager/home.nix];
+        extraSpecialArgs = { inherit inputs outputs; };
+        modules = [
+         ./home-manager/home.nix
+        ];
       };
     };
   };
