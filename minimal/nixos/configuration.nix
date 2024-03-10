@@ -1,52 +1,23 @@
-# This is your system's configuration file.
-# Use this to configure your system environment (it replaces /etc/nixos/configuration.nix)
+{ inputs, lib, config, pkgs, ...}: 
 {
-  inputs,
-  lib,
-  config,
-  pkgs,
-  ...
-}: {
-  # You can import other NixOS modules here
+  # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = [
-    # If you want to use modules from other flakes (such as nixos-hardware):
-    # inputs.hardware.nixosModules.common-cpu-amd
-    # inputs.hardware.nixosModules.common-ssd
-
-    # You can also split up your configuration and import pieces of it here:
-    # ./users.nix
-
-    # Import your generated (nixos-generate-config) hardware configuration
     ./hardware-configuration.nix
   ];
 
+  # Global nixpkgs settings
   nixpkgs = {
-    # You can add overlays here
-    overlays = [
-      # If you want to use overlays exported from other flakes:
-      # neovim-nightly-overlay.overlays.default
-
-      # Or define it inline, for example:
-      # (final: prev: {
-      #   hi = final.hello.overrideAttrs (oldAttrs: {
-      #     patches = [ ./change-hello-to-hi.patch ];
-      #   });
-      # })
-    ];
-    # Configure your nixpkgs instance
+    overlays = [ ]; # Add overlays here either from flakes or inline (see https://github.com/Misterio77/nix-starter-configs/blob/main/minimal/nixos/configuration.nix and https://github.com/Misterio77/nix-config/tree/main/overlays) 
     config = {
-      # Disable if you don't want unfree packages
       allowUnfree = true;
     };
   };
 
-  # This will add each flake input as a registry
-  # To make nix3 commands consistent with your flake
+  # This will add each flake input as a registry to make nix3 commands consistent with this flake
   nix.registry = (lib.mapAttrs (_: flake: {inherit flake;})) ((lib.filterAttrs (_: lib.isType "flake")) inputs);
 
-  # This will additionally add your inputs to the system's legacy channels
-  # Making legacy nix commands consistent as well, awesome!
-  nix.nixPath = ["/etc/nix/path"];
+  # Add the inputs to the system's legacy channels making legacy nix commands consistent as well!
+  nix.nixPath = [ "/etc/nix/path" ];
   environment.etc =
     lib.mapAttrs'
     (name: value: {
@@ -55,40 +26,36 @@
     })
     config.nix.registry;
 
+  # Settings for NixOS
   nix.settings = {
-    # Enable flakes and new 'nix' command
-    experimental-features = "nix-command flakes";
-    # Deduplicate and optimize nix store
-    auto-optimise-store = true;
+    experimental-features = "nix-command flakes"; # Enable flakes and new 'nix' command
+    auto-optimise-store = true; # Deduplicate and optimize nix store
   };
 
-  # FIXME: Add the rest of your current configuration
-
-  # TODO: This is just an example, be sure to use whatever bootloader you prefer
+  # Setup for GRUB (assuming device is /dev/sda)
   boot.loader.grub.enable = true;
   boot.loader.grub.device = "/dev/sda";
   boot.loader.grub.useOSProber = true;
-  
-  boot.kernelParams = ["quiet"];
 
-  # TODO: Configure your system-wide user settings (groups, etc), add more users as needed.
+  # Kernel options
+  boot.kernelParams = [
+    "quiet" # Don't print SystemD startup stuff
+  ];
+
+  # System-wide user settings (groups, etc.)
   users.users = {
-    # FIXME: Replace with your username
     josh = {
-      # TODO: You can set an initial password for your user.
-      # If you do, you can skip setting a root password by passing '--no-root-passwd' to nixos-install.
-      # Be sure to change it (using passwd) after rebooting!
-      initialPassword = "password";
+      initialPassword = "password"; # Be sure to change me (using passwd)
       isNormalUser = true;
       openssh.authorizedKeys.keys = [
-        # TODO: Add your SSH public key(s) here, if you plan on using SSH to connect
+        # Add SSH public key(s) here.
       ];
-      # TODO: Be sure to add any other groups you need (such as networkmanager, audio, docker, etc)
-      extraGroups = ["networkmanager" "wheel"];
+      extraGroups = [ "networkmanager" "wheel" "docker" ];
       shell = pkgs.fish;
     };
   };
 
+  # Use greetd (CLI greeter) for login
   services.greetd = {
     enable = true;
     settings = {
@@ -98,6 +65,16 @@
     };
   };
 
+  # Homemanager can't manage default shell and sway needs to be available for greetd
+  programs.fish.enable = true;
+  programs.sway.enable = true;
+
+  # Global environment variables
+  environment.sessionVariables = rec {
+    WLR_NO_HARDWARE_CURSORS = "1"; # for sway/wayland in virtualbox
+  };
+
+  # Networking stuff
   networking = {
     firewall = {
       enable = true;
@@ -108,16 +85,10 @@
     networkmanager.enable = true;
   };
 
+  # Misc settings
   time.timeZone = "London/Europe";
   i18n = {
     defaultLocale = "en_GB.UTF-8";
-  };
-
-  programs.sway.enable = true;
-  programs.fish.enable = true;
-
-  environment.sessionVariables = rec {
-    WLR_NO_HARDWARE_CURSORS = "1"; # for sway/wayland in virtualbox
   };
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
