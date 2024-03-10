@@ -1,47 +1,21 @@
-{
-  inputs,
-  lib,
-  config,
-  pkgs,
-  ...
-}: 
+{ inputs, lib, config, pkgs, ... }: 
 let
     config = ./. + "/../config/";
 in 
 {
-  # You can import other home-manager modules here
+  # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = with inputs; [
-    # If you want to use home-manager modules from other flakes (such as nix-colors):
-    # inputs.nix-colors.homeManagerModule
-
-    # You can also split up your configuration and import pieces of it here:
-    # ./nvim.nix
     ./firefox.nix
   ];
 
   nixpkgs = {
-    # You can add overlays here
-    overlays = [
-      # If you want to use overlays exported from other flakes:
-      # neovim-nightly-overlay.overlays.default
-
-      # Or define it inline, for example:
-      # (final: prev: {
-      #   hi = final.hello.overrideAttrs (oldAttrs: {
-      #     patches = [ ./change-hello-to-hi.patch ];
-      #   });
-      # })
-    ];
-    # Configure your nixpkgs instance
+    overlays = [ ]; # Add overlays here either from flakes or inline (see https://github.com/Misterio77/nix-starter-configs/blob/main/minimal/home-manager/home.nix and https://github.com/Misterio77/nix-config/tree/main/overlays) 
     config = {
-      # Disable if you don't want unfree packages
       allowUnfree = true;
-      # Workaround for https://github.com/nix-community/home-manager/issues/2942
-      allowUnfreePredicate = _: true;
+      allowUnfreePredicate = _: true; # nix-community/home-manager/issues/2942
     };
   };
 
-  # TODO: Set your username
   home = {
     username = "josh";
     homeDirectory = "/home/josh";
@@ -51,13 +25,18 @@ in
     tofi
   ];
 
-  # Add stuff for your user as you see fit:
-  # programs.neovim.enable = true;
-  # home.packages = with pkgs; [ steam ];
-
-  # Enable home-manager and git
   programs.home-manager.enable = true;
-  programs.git.enable = true;
+
+  programs.git = {
+    enable = true;
+    userName = "Josh";
+    userEmail = "josh@joshj.dev";
+    extraConfig = {
+      push = {
+        autoSetupRemote = true; 
+      };
+    };
+  };
 
   programs.kitty = {
     enable = true;
@@ -69,74 +48,69 @@ in
     enable = true;
   };
 
+  programs.fish = {
+    enable = true;
+    interactiveShellInit = builtins.readFile "${config}/config.fish";
+  };
+
   wayland = {
     windowManager.sway = {
-        enable = true;
-        systemd.enable = true;
-        config = rec {
-            modifier = "Mod1";
-            terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty";
-            # should I go back to the i3 style?
-            menu = ''
-                tofi-run \
-                --width 100% \
-                --height 100% \
-                --fuzzy-match true \
-                --font Iosevka \
-                --font-size 14 \
-                --padding-left 35% \
-                --padding-top 30% \
-                --border-width 0 \
-                --outline-width 0 \
-                --result-spacing 15 \
-                --num-results 5 \
-                --prompt-text 'run: ' \
-                --background-color '#000000CC' \
-                | xargs swaymsg exec
-                '';
-            bars = [{
-            }];
-            startup = [
-            ];
-            window = {
-                border = 2;
-                hideEdgeBorders = "smart";
-                titlebar = false;
-            };
-            workspaceAutoBackAndForth = true;
-            keybindings = {
-                "${modifier}+Shift+q"   = "exec power";
-                "${modifier}+Return"    = "exec ${terminal}";
-                "${modifier}+Semicolon" = "exec ${menu}";
-                "${modifier}+Shift+x"   = "kill";
-                "${modifier}+c"         = "exec paste";
-                "${modifier}+h"         = "focus left";
-                "${modifier}+j"         = "focus down";
-                "${modifier}+k"         = "focus up";
-                "${modifier}+l"         = "focus right";
-                "${modifier}+Shift+h"   = "move left";
-                "${modifier}+Shift+j"   = "move down";
-                "${modifier}+Shift+k"   = "move up";
-                "${modifier}+Shift+l"   = "move right";
-                "${modifier}+a"         = "workspace number 1";
-                "${modifier}+s"         = "workspace number 2";
-                "${modifier}+d"         = "workspace number 3";
-                "${modifier}+f"         = "workspace number 4";
-                "${modifier}+g"         = "workspace number 5";
-                "${modifier}+Shift+a"   = "move container to workspace number 1";
-                "${modifier}+Shift+s"   = "move container to workspace number 2";
-                "${modifier}+Shift+d"   = "move container to workspace number 3";
-                "${modifier}+Shift+f"   = "move container to workspace number 4";
-                "${modifier}+Shift+g"   = "move container to workspace number 5";
-            };
+      enable = true;
+      systemd.enable = true;
+      config = rec {
+        modifier = "Mod1";
+        terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
+        menu = ''
+          tofi-run \
+          --width 100% \
+          --height 100% \
+          --fuzzy-match true \
+          --font Iosevka \
+          --font-size 14 \
+          --padding-left 35% \
+          --padding-top 30% \
+          --border-width 0 \
+          --outline-width 0 \
+          --result-spacing 15 \
+          --num-results 5 \
+          --prompt-text 'run: ' \
+          --background-color '#000000CC' \
+          | xargs swaymsg exec
+          '';
+        bars = [{ }];
+        startup = [ ];
+        window = {
+          border = 2;
+          hideEdgeBorders = "smart";
+          titlebar = false;
         };
-    };
-};
-
-  programs = {
-    fish = {
-        enable = true;
-        interactiveShellInit = builtins.readFile "${config}/config.fish";
+        workspaceAutoBackAndForth = true;
+        keybindings = {
+          "${modifier}+Shift+q"   = "exec power";
+          "${modifier}+Return"    = "exec ${terminal}";
+          "${modifier}+Semicolon" = "exec ${menu}";
+          "${modifier}+Shift+x"   = "kill";
+          "${modifier}+c"         = "exec paste";
+          "${modifier}+h"         = "focus left";
+          "${modifier}+j"         = "focus down";
+          "${modifier}+k"         = "focus up";
+          "${modifier}+l"         = "focus right";
+          "${modifier}+Shift+h"   = "move left";
+          "${modifier}+Shift+j"   = "move down";
+          "${modifier}+Shift+k"   = "move up";
+          "${modifier}+Shift+l"   = "move right";
+          "${modifier}+a"         = "workspace number 1";
+          "${modifier}+s"         = "workspace number 2";
+          "${modifier}+d"         = "workspace number 3";
+          "${modifier}+f"         = "workspace number 4";
+          "${modifier}+g"         = "workspace number 5";
+          "${modifier}+Shift+a"   = "move container to workspace number 1";
+          "${modifier}+Shift+s"   = "move container to workspace number 2";
+          "${modifier}+Shift+d"   = "move container to workspace number 3";
+          "${modifier}+Shift+f"   = "move container to workspace number 4";
+          "${modifier}+Shift+g"   = "move container to workspace number 5";
+        };
+      };
     };
   };
 
