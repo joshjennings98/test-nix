@@ -6,7 +6,12 @@
     profiles.josh = {
       bookmarks = { };
       extensions = with inputs.firefox-addons; [
+        darkreader
         ublock-origin
+        facebook-container
+        gruvbox-dark-theme
+        old-reddit-redirect
+        reddit-enhancement-suite
       ];
       bookmarks = { };
       settings = {
