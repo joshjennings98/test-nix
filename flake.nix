@@ -1,11 +1,11 @@
 {
-  description = "NixOS + standalone home-manager config flakes to get you started!";
+  description = "Josh's NixOS + home-manager config flake with installation script";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-23.11";
   };
 
-  outputs = {nixpkgs, ...}: let
+  outputs = { nixpkgs, ... }: let
     forAllSystems = nixpkgs.lib.genAttrs [
       "aarch64-linux"
       "i686-linux"
@@ -17,17 +17,10 @@
     templates = {
       minimal = {
         description = ''
-          Minimal flake - contains only the configs.
-          Contains the bare minimum to migrate your existing legacy configs to flakes.
+          Minimal flake, based off of https://github.com/Misterio77/nix-starter-configs
+          TODO: rename this from minimal to something else.
         '';
         path = ./minimal;
-      };
-      standard = {
-        description = ''
-          Standard flake - augmented with boilerplate for custom packages, overlays, and reusable modules.
-          Perfect migration path for when you want to dive a little deeper.
-        '';
-        path = ./standard;
       };
     };
     formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.alejandra);
