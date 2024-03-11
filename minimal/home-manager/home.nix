@@ -23,7 +23,11 @@ in
 
   home.packages = with pkgs; [
     tofi
+    iosevka
+    wl-clipboard
   ];
+
+  home.file.".config/tofi/config".source = "${config}/config.tofi"
 
   programs.home-manager.enable = true;
 
@@ -53,6 +57,16 @@ in
     interactiveShellInit = builtins.readFile "${config}/config.fish";
   };
 
+  programs.wpaperd = {
+    enable = true;
+    settings.default.path = "${assets}/wallpaper.jpg"
+  }
+
+  services.cliphist = {
+    enable = true;
+    systemdTarget = "sway-session.target";
+  }
+
   wayland = {
     windowManager.sway = {
       enable = true;
@@ -60,25 +74,12 @@ in
       config = rec {
         modifier = "Mod1";
         terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
-        menu = ''
-          tofi-run \
-          --width 100% \
-          --height 100% \
-          --fuzzy-match true \
-          --font Iosevka \
-          --font-size 14 \
-          --padding-left 35% \
-          --padding-top 30% \
-          --border-width 0 \
-          --outline-width 0 \
-          --result-spacing 15 \
-          --num-results 5 \
-          --prompt-text 'run: ' \
-          --background-color '#000000CC' \
-          | xargs swaymsg exec
-          '';
+        menu = "tofi-run | xargs swaymsg exec";
         bars = [{ }];
-        startup = [ ];
+        startup = [ 
+          { command = "wpaperd"; }
+          { command = "cliphist wipe"; }
+        ];
         window = {
           border = 2;
           hideEdgeBorders = "smart";
@@ -90,7 +91,7 @@ in
           "${modifier}+Return"    = "exec ${terminal}";
           "${modifier}+Semicolon" = "exec ${menu}";
           "${modifier}+Shift+x"   = "kill";
-          "${modifier}+c"         = "exec paste";
+          "${modifier}+c"         = "exec cliphist list | tofi | cliphist decode | wl-copy";
           "${modifier}+h"         = "focus left";
           "${modifier}+j"         = "focus down";
           "${modifier}+k"         = "focus up";
