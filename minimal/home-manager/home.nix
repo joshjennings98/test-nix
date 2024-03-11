@@ -2,6 +2,8 @@
 let
     config = ./. + "/../config/";
     assets = ./. + "/../assets/";
+
+    sway-bar = import ./sway-bar.nix { inherit pkgs; };
 in 
 {
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
@@ -25,6 +27,7 @@ in
   home.packages = with pkgs; [
     iosevka
     jq
+    sway-bar
     tofi
     tree
     wl-clipboard
@@ -102,6 +105,7 @@ in
         terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
         menu = "tofi-run | xargs swaymsg exec";
         bars = [{ 
+          statusCommand = "${sway-bar}/bin/sway-bar";
           position = "top";
           fonts = {
             names = [ "Iosevka" ];
