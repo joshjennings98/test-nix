@@ -77,6 +77,7 @@ in
         terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
         menu = "tofi-run | xargs swaymsg exec";
         bars = [{ 
+          position = "top";
           fonts = {
             names = [ "Iosevka" ];
             size = 12.0;
