@@ -33,7 +33,7 @@ in
         "signon.rememberSignons" = false;
         "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
       };
-      userChrome = builtins.readFile "${userChome}";
+      userChrome = builtins.readFile "${userChrome}";
     };
   };
 
