@@ -23,8 +23,10 @@ in
   };
 
   home.packages = with pkgs; [
-    tofi
     iosevka
+    jq
+    tofi
+    tree
     wl-clipboard
   ];
 
@@ -58,14 +60,37 @@ in
     interactiveShellInit = builtins.readFile "${config}/config.fish";
   };
 
+  programs.tmux = {
+    enable = true;
+  };
+
   programs.wpaperd = {
     enable = true;
     settings.default.path = "${assets}/wallpaper.jpg";
   };
 
+  programs.swaylock = {
+    enable = true;
+    settings = {
+      color = "000000";
+    };
+  };
+
+  services.swayidle = {
+    enable = true;
+    systemdTarget = "sway-session.target";
+    timeouts = [
+      { timeout = 300; command = "${pkgs.swaylock}/bin/swaylock"; }
+    ];
+  };
+
   services.cliphist = {
     enable = true;
     systemdTarget = "sway-session.target";
+  };
+
+  services.pasystray = {
+    enable = true;
   };
 
   wayland = {
@@ -94,7 +119,7 @@ in
         };
         workspaceAutoBackAndForth = true;
         keybindings = {
-          "${modifier}+Shift+q"   = "exec power";
+          "${modifier}+Shift+q"   = ''exec echo -e "Lock\nShutdown\nReboot" | tofi | sh -c 'read action; case $action in "Lock") swaylock ;; "Shutdown") shutdown 0 ;; "Reboot") reboot ;; esac' '';
           "${modifier}+Return"    = "exec ${terminal}";
           "${modifier}+Semicolon" = "exec ${menu}";
           "${modifier}+Shift+x"   = "kill";
