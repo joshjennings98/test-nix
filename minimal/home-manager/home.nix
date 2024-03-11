@@ -59,7 +59,7 @@ in
 
   programs.wpaperd = {
     enable = true;
-    settings.default.path = "${assets}/wallpaper.jpg"
+    settings.default.path = "${assets}/wallpaper.jpg";
   }
 
   services.cliphist = {
