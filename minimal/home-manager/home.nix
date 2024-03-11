@@ -52,6 +52,10 @@ in
     enable = true;
     shellIntegration.enableFishIntegration = true;
     theme = "Gruvbox Dark";
+    font = {
+      name = "Iosevka";
+      size = 12;
+    };
   };
 
   programs.fzf = {
