@@ -60,12 +60,12 @@ in
   programs.wpaperd = {
     enable = true;
     settings.default.path = "${assets}/wallpaper.jpg";
-  }
+  };
 
   services.cliphist = {
     enable = true;
     systemdTarget = "sway-session.target";
-  }
+  };
 
   wayland = {
     windowManager.sway = {
