@@ -27,7 +27,7 @@ in
     wl-clipboard
   ];
 
-  home.file.".config/tofi/config".source = "${config}/config.tofi"
+  home.file.".config/tofi/config".source = "${config}/config.tofi";
 
   programs.home-manager.enable = true;
 
