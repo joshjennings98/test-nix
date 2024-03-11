@@ -76,7 +76,12 @@ in
         modifier = "Mod1";
         terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
         menu = "tofi-run | xargs swaymsg exec";
-        bars = [{ }];
+        bars = [{ 
+          fonts = {
+            names = [ "Iosevka" ];
+            size = 12.0;
+          };
+        }];
         startup = [ 
           { command = "wpaperd"; }
           { command = "cliphist wipe"; }
