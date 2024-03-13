@@ -25,8 +25,10 @@ in
   };
 
   home.packages = with pkgs; [
+    disocrd
     iosevka
     jq
+    #obsidian
     sway-bar
     tofi
     tree
@@ -69,6 +71,10 @@ in
 
   programs.tmux = {
     enable = true;
+  };  
+
+  programs.zathura = {
+    enable = true;
   };
 
   programs.wpaperd = {
@@ -80,6 +86,27 @@ in
     enable = true;
     settings = {
       color = "000000";
+    };
+  };
+
+  programs.joshuto = {
+    enable = true;
+    settings = {
+      show_icons = false;
+    };
+    mimetype = {
+      class = {
+        image_default = [{
+          command = "${pkgs.feh}/bin/feh";
+          args = ["--scale-down" "--start-at"];
+          fork = true;
+          silent = true;
+        }];
+      };
+      extension = {
+        png."inherit" = "image_default";
+        jpg."inherit" = "image_default";
+      };
     };
   };
 
@@ -97,6 +124,10 @@ in
   };
 
   services.pasystray = {
+    enable = true;
+  };
+
+  services.mako = {
     enable = true;
   };
 
