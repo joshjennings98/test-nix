@@ -133,6 +133,10 @@ in
     enable = true;
   };
 
+  services.mpv = {
+    enable = true;
+  };
+
   services.pasystray = {
     enable = true;
   };
