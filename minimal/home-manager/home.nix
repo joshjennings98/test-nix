@@ -24,8 +24,12 @@ in
     homeDirectory = "/home/josh";
   };
 
+  programs.home-manager.enable = true;
+
   home.packages = with pkgs; [
-    disocrd
+    babashka
+    discord
+    go
     iosevka
     jq
     obsidian
@@ -37,9 +41,7 @@ in
     yt-dlp
   ];
 
-  home.file.".config/tofi/config".source = "${config}/config.tofi";
-
-  programs.home-manager.enable = true;
+  home.file.".config/tofi/config".source = "${config}/config.tofi"; # No home-manager options for tofi
 
   programs.fish = {
     enable = true;
