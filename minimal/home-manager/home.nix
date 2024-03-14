@@ -28,16 +28,26 @@ in
     disocrd
     iosevka
     jq
-    #obsidian
+    obsidian
     sway-bar
     tofi
     tree
+    typst
     wl-clipboard
   ];
 
   home.file.".config/tofi/config".source = "${config}/config.tofi";
 
   programs.home-manager.enable = true;
+
+  programs.fish = {
+    enable = true;
+    interactiveShellInit = builtins.readFile "${config}/config.fish";
+  };
+
+  programs.fzf = {
+    enable = true;
+  };
 
   programs.git = {
     enable = true;
@@ -47,45 +57,6 @@ in
       push = {
         autoSetupRemote = true; 
       };
-    };
-  };
-
-  programs.kitty = {
-    enable = true;
-    shellIntegration.enableFishIntegration = true;
-    theme = "Gruvbox Dark";
-    font = {
-      name = "Iosevka";
-      size = 12;
-    };
-  };
-
-  programs.fzf = {
-    enable = true;
-  };
-
-  programs.fish = {
-    enable = true;
-    interactiveShellInit = builtins.readFile "${config}/config.fish";
-  };
-
-  programs.tmux = {
-    enable = true;
-  };  
-
-  programs.zathura = {
-    enable = true;
-  };
-
-  programs.wpaperd = {
-    enable = true;
-    settings.default.path = "${assets}/wallpaper.jpg";
-  };
-
-  programs.swaylock = {
-    enable = true;
-    settings = {
-      color = "000000";
     };
   };
 
@@ -110,12 +81,42 @@ in
     };
   };
 
-  services.swayidle = {
+  programs.kitty = {
     enable = true;
-    systemdTarget = "sway-session.target";
-    timeouts = [
-      { timeout = 300; command = "${pkgs.swaylock}/bin/swaylock"; }
-    ];
+    shellIntegration.enableFishIntegration = true;
+    theme = "Gruvbox Dark";
+    font = {
+      name = "Iosevka";
+      size = 12;
+    };
+  };
+
+  programs.mpv = {
+    enable = true;
+  };
+
+  programs.ncmpcpp = {
+    enable = true;
+  };
+
+  programs.swaylock = {
+    enable = true;
+    settings = {
+      color = "000000";
+    };
+  };
+
+  programs.tmux = {
+    enable = true;
+  };
+
+  programs.wpaperd = {
+    enable = true;
+    settings.default.path = "${assets}/wallpaper.jpg";
+  };
+
+  programs.zathura = {
+    enable = true;
   };
 
   services.cliphist = {
@@ -123,12 +124,24 @@ in
     systemdTarget = "sway-session.target";
   };
 
+  services.mako = {
+    enable = true;
+  };
+
+  services.mpd = {
+    enable = true;
+  };
+
   services.pasystray = {
     enable = true;
   };
 
-  services.mako = {
+  services.swayidle = {
     enable = true;
+    systemdTarget = "sway-session.target";
+    timeouts = [
+      { timeout = 300; command = "${pkgs.swaylock}/bin/swaylock"; }
+    ];
   };
 
   wayland = {
@@ -186,9 +199,7 @@ in
     };
   };
 
-  # Nicely reload system units when changing configs
-  systemd.user.startServices = "sd-switch";
+  systemd.user.startServices = "sd-switch"; # Nicely reload system units when changing configs
 
-  # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
-  home.stateVersion = "23.11";
+  home.stateVersion = "23.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }
