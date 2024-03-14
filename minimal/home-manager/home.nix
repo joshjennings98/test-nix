@@ -48,19 +48,13 @@ in
     interactiveShellInit = builtins.readFile "${config}/config.fish";
   };
 
-  programs.fzf = {
-    enable = true;
-  };
+  programs.fzf.enable = true;
 
   programs.git = {
     enable = true;
     userName = "Josh";
     userEmail = "josh@joshj.dev";
-    extraConfig = {
-      push = {
-        autoSetupRemote = true; 
-      };
-    };
+    extraConfig.push.autoSetupRemote = true;
   };
 
   programs.joshuto = {
@@ -94,54 +88,36 @@ in
     };
   };
 
-  programs.mpv = {
-    enable = true;
-  };
+  programs.mpv.enable = true;
 
-  programs.ncmpcpp = {
-    enable = true;
-  };
+  programs.ncmpcpp.enable = true;
 
   programs.swaylock = {
     enable = true;
-    settings = {
-      color = "000000";
-    };
+    settings.color = "000000";
   };
 
-  programs.tmux = {
-    enable = true;
-  };
+  programs.tmux.enable = true;
 
   programs.wpaperd = {
     enable = true;
     settings.default.path = "${assets}/wallpaper.jpg";
   };
 
-  programs.zathura = {
-    enable = true;
-  };
+  programs.zathura.enable = true;
 
   services.cliphist = {
     enable = true;
     systemdTarget = "sway-session.target";
   };
 
-  services.mako = {
-    enable = true;
-  };
+  services.mako.enable = true;
 
-  services.mpd = {
-    enable = true;
-  };
+  services.mpd.enable = true;
 
-  services.mpv = {
-    enable = true;
-  };
+  services.mpv.enable = true;
 
-  services.pasystray = {
-    enable = true;
-  };
+  services.pasystray.enable = true;
 
   services.swayidle = {
     enable = true;
