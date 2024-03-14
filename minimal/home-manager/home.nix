@@ -34,6 +34,7 @@ in
     tree
     typst
     wl-clipboard
+    yt-dlp
   ];
 
   home.file.".config/tofi/config".source = "${config}/config.tofi";
