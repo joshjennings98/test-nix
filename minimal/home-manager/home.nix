@@ -57,6 +57,8 @@ in
     extraConfig.push.autoSetupRemote = true;
   };
 
+  programs.imv.enable = true;
+
   programs.joshuto = {
     enable = true;
     settings = {
@@ -65,8 +67,8 @@ in
     mimetype = {
       class = {
         image_default = [{
-          command = "${pkgs.feh}/bin/feh";
-          args = ["--scale-down" "--start-at"];
+          command = "${pkgs.imv}/bin/imv";
+          args = [];
           fork = true;
           silent = true;
         }];
@@ -114,8 +116,6 @@ in
   services.mako.enable = true;
 
   services.mpd.enable = true;
-
-  services.mpv.enable = true;
 
   services.pasystray.enable = true;
 
