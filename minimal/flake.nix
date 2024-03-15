@@ -33,15 +33,15 @@
       };
     };
 
-    # Reload with 'home-manager --flake .#josh@Ganymede'
-    homeConfigurations = {
-      "josh@Ganymede" = home-manager.lib.homeManagerConfiguration {
-        pkgs = nixpkgs.legacyPackages.x86_64-linux; # Home-manager requires 'pkgs' instance
-        extraSpecialArgs = { inherit inputs outputs; };
-        modules = [
-         ./home-manager/home.nix
-        ];
-      };
-    };
+    # # Reload with 'home-manager --flake .#josh@Ganymede'
+    # homeConfigurations = {
+    #   "josh@Ganymede" = home-manager.lib.homeManagerConfiguration {
+    #     pkgs = nixpkgs.legacyPackages.x86_64-linux; # Home-manager requires 'pkgs' instance
+    #     extraSpecialArgs = { inherit inputs outputs; };
+    #     modules = [
+    #      ./home-manager/home.nix
+    #     ];
+    #   };
+    # };
   };
 }

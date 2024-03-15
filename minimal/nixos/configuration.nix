@@ -3,6 +3,7 @@
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = [
     ./hardware-configuration.nix
+    ./home-manager.nix
   ];
 
   # Global nixpkgs settings
