@@ -24,7 +24,7 @@ cp /etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
 sudo nixos-rebuild switch --flake .#Ganymede
 
 # Build home-manager stuff (run in home-manager shell since it isn't always available after the above nix-starter-configs/issues/12)
-nix-shell --packages home-manager --run "home-manager switch --flake .#josh@Ganymede"
+#nix-shell --packages home-manager --run "home-manager switch --flake .#josh@Ganymede" # not needed when using home-manager as a nixos module
 
 # Reboot
 echo 'Installation complete. Reboot? [y/N]' && read val && [[ "$val" == "y" ]] && sudo reboot;
