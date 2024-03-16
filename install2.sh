@@ -21,7 +21,7 @@ sudo nixos-generate-config --no-filesystems --root /mnt
 # Copy dotfiles from remote
 cd /mnt/etc/nixos
 sudo nix --experimental-features "nix-command flakes" \
-    flake init -t github:joshjennings98/test-nix#minimal
+    flake init -t github:joshjennings98/test-nix/22df255#minimal
 
 # Copy hardware configuration (note: make sure volumes match in configuration.nix)
 sudo cp /mnt/etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
