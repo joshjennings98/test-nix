@@ -35,6 +35,9 @@
       Ganymede = nixpkgs.lib.nixosSystem {
         specialArgs = { inherit inputs outputs; };
         modules = [
+          inputs.disko.nixosModules.default
+          (import ./nixos/disko.nix { device = "/dev/sda"; }) # TODO: in script awk and replace with value in $DEVICE
+          inputs.impermanence.nixosModules.impermanence
           ./nixos/configuration.nix
         ];
       };
