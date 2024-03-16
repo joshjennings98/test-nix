@@ -23,4 +23,4 @@ sudo nixos-generate-config --no-filesystems --root /mnt
 cp /mnt/etc/nixos/hardware-configuration.nix minimal/nixos/hardware-configuration.nix
 
 # Install nixos
-sudo nixos-install --root /mnt --flake minimal#Ganymede
+sudo nixos-install --root /mnt --flake ./minimal#Ganymede
