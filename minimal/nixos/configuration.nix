@@ -4,6 +4,7 @@
   imports = [
     ./hardware-configuration.nix
     ./home-manager.nix
+    ./impermanence.nix
   ];
 
   # Global nixpkgs settings
