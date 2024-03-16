@@ -138,7 +138,7 @@ in
 
   services.mako.enable = true;
 
-  services.mpd.enable = true;
+  #services.mpd.enable = true; # TODO: fix this breaking on musicDirectory things
 
   services.pasystray.enable = true;
 
