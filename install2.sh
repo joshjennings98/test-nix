@@ -20,13 +20,14 @@ sudo nixos-generate-config --no-filesystems --root /mnt
 
 # Copy dotfiles from remote
 cd /mnt/etc/nixos
-nix flake init -t github:joshjennings98/test-nix#minimal
+sudo nix --experimental-features "nix-command flakes" \
+    flake init -t github:joshjennings98/test-nix#minimal
 
 # Copy hardware configuration (note: make sure volumes match in configuration.nix)
-cp /etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
+sudo cp /mnt/etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
 
 # Persist files
-cp -r /etc/nixos /persist
+sudo cp -r /etc/nixos /persist
 
 # Install nixos
-#sudo nixos-install --root /mnt --flake .#Ganymede
+sudo nixos-install --root /mnt --flake .#Ganymede
