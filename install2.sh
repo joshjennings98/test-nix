@@ -26,7 +26,8 @@ sudo nix --experimental-features "nix-command flakes" \
 # Copy hardware configuration (note: make sure volumes match in configuration.nix)
 sudo cp /mnt/etc/nixos/hardware-configuration.nix nixos/hardware-configuration.nix
 
-# Persist files
+# Persist existing configuration files
+sudo mkdir /persist
 sudo cp -r /etc/nixos /persist
 
 # Install nixos
