@@ -104,6 +104,8 @@ cat << EOF > "/tmp/flake.nix"
       inputs.nixpkgs.follows = "nixpkgs"; # use the same version of nixpkgs as specified in the current flake 
     };
 
+    impermanence.url = "github:nix-community/impermanence";
+
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -141,6 +143,7 @@ cat << EOF > "/tmp/configuration.nix"
   imports = [
     ./disko.nix
     ./hardware-configuration.nix
+    ./impermanence.nix
   ];
 
   # Global nixpkgs settings
@@ -234,10 +237,72 @@ cat << EOF > "/tmp/configuration.nix"
 }
 EOF
 
+# Create impermanence.nix
+rm -f "/tmp/impermanence.nix
+cat << EOF > "/tmp/impermanence.nix"
+{ lib, pkgs, inputs, ... }: {
+
+  imports = [
+    inputs.impermanence.nixosModules.impermanence
+  ];
+
+  boot.initrd.postDeviceCommands = lib.mkAfter ''
+  
+  # Mount old root
+  mkdir /btrfs_tmp
+  mount /dev/root_vg/root /btrfs_tmp
+
+  # Backup previous root
+  if [[ -e /btrfs_tmp/root ]]; then
+    mkdir -p /btrfs_tmp/old_roots
+    timestamp=$(date --date="@$(stat -c %Y /btrfs_tmp/root)" "+%Y-%m-%-d_%H:%M:%S")
+    mv /btrfs_tmp/root "/btrfs_tmp/old_roots/$timestamp"
+  fi
+
+  # Delete backups older than 7 days
+  delete_subvolume_recursively() {
+    IFS=$'\n'
+    for i in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
+      delete_subvolume_recursively "/btrfs_tmp/$i"
+    done
+    btrfs subvolume delete "$1"
+  }
+
+  for i in $(find /btrfs_tmp/old_roots/ -maxdepth 1 -mtime +7); do
+    delete_subvolume_recursively "$i"
+  done
+
+  # Create new clean root    
+  btrfs subvolume create /btrfs_tmp/root
+  umount /btrfs_tmp
+  '';
+
+  fileSystems."/persist".neededForBoot = true;
+  environment.persistence."/persist/system" = {
+    hideMounts = true;
+    directories = [
+      "/etc/nixos"
+      "/var/log"
+      "/var/lib/bluetooth"
+      "/var/lib/nixos"
+      "/var/lib/systemd/coredump"
+      "/etc/NetworkManager/system-connections"
+    ];
+    files = [
+      "/etc/machine-id"
+      { file = "/var/keys/secret_file"; parentDirectory = { mode = "u=rwx,g=,o="; }; }
+    ];
+  };
+
+  programs.fuse.userAllowOther = true;
+}
+EOF
+
 # Move nixos configuration files
 sudo mv /tmp/configuration.nix /mnt/etc/nixos/
 sudo mv /tmp/disko.nix         /mnt/etc/nixos/
 sudo mv /tmp/flake.nix         /mnt/etc/nixos/
+sudo mv /tmp/impermanence.nix  /mnt/etc/nixos/
 
 # Run the installation
 sudo nixos-install --root /mnt --flake '/mnt/etc/nixos#Ganymede'
