@@ -7,6 +7,7 @@ lsblk
 read -p "Device to use (e.g. '/dev/sda'): " DEVICE
 
 # Make disko configuration
+rm -f "/tmp/disko.nix"
 cat << EOF > "/tmp/disko.nix"
 {
   disko.devices = {
@@ -47,16 +48,14 @@ cat << EOF > "/tmp/disko.nix"
 EOF
 
 # Partition drive
-sudo nix \
- --experimental-features "nix-command flakes" \
- run github:nix-community/disko -- \
- --mode disko /tmp/disko.nix
+sudo nix --experimental-features "nix-command flakes" run github:nix-community/disko -- --mode disko /tmp/disko.nix
 
 # Create nix config files (--no-filesystems because it is handled by disko, --root so we create them in /mnt/etc/nixos)
 sudo nixos-generate-config --no-filesystems --root /mnt
 
 # Convert generated nixos dir into flake (with disko and home-manager support etc.)
-cat << EOF > "/mnt/etc/nixos/flake.nix"
+rm -f "/tmp/flake.nix"
+cat << EOF > "/tmp/flake.nix"
 {
   description = "Josh's NixOS Config";
 
@@ -88,7 +87,6 @@ cat << EOF > "/mnt/etc/nixos/flake.nix"
         specialArgs = { inherit inputs outputs; };
         modules = [
           inputs.disko.nixosModules.default
-          (import ./disko.nix { device = "$DEVICE"; })
           ./configuration.nix
         ];
       }; 
@@ -97,17 +95,14 @@ cat << EOF > "/mnt/etc/nixos/flake.nix"
 }
 EOF
 
-# Include the disko configuration
-mv /tmp/disko.nix /mnt/etc/nixos/
-
 # Create configuration.nix
-rm /mnt/etc/nixos/configuration.nix
-cat << EOF > "/mnt/etc/nixos/configuration.nix"
+rm -f "/tmp/configuration.nix"
+cat << EOF > "/tmp/configuration.nix"
 { inputs, lib, config, pkgs, ...}: 
 {
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = [
-    ./disko-config.nix
+    ./disko.nix
     ./hardware-configuration.nix
   ];
 
@@ -127,7 +122,7 @@ cat << EOF > "/mnt/etc/nixos/configuration.nix"
   environment.etc =
     lib.mapAttrs'
     (name: value: {
-      name = "nix/path/${name}";
+      name = "nix/path/\${name}";
       value.source = value.flake;
     })
     config.nix.registry;
@@ -166,7 +161,7 @@ cat << EOF > "/mnt/etc/nixos/configuration.nix"
     enable = true;
     settings = {
       default_session = {
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd sway";
+        command = "\${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd sway";
       };
     };
   };
@@ -202,5 +197,11 @@ cat << EOF > "/mnt/etc/nixos/configuration.nix"
 }
 EOF
 
+# Move nixos configuration files
+sudo mv /tmp/configuration.nix /mnt/etc/nixos/
+sudo mv /tmp/disko.nix         /mnt/etc/nixos/
+sudo mv /tmp/flake.nix         /mnt/etc/nixos/
+
 # Run the installation
 sudo nixos-install --root /mnt --flake '/mnt/etc/nixos#Ganymede'
+
