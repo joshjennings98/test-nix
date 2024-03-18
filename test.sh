@@ -3,8 +3,8 @@
 set -e
 
 # List disks and prompt for which one to use
-lsblk
-read -p "Device to use (e.g. '/dev/sda'): " DEVICE
+lsblk -o NAME,SIZE,PATH
+read -p "Device path to partition (e.g. '/dev/sda'): " DEVICE
 
 # Make disko configuration
 rm -f "/tmp/disko.nix"
@@ -89,6 +89,14 @@ sudo nix --experimental-features "nix-command flakes" run github:nix-community/d
 
 # Create nix config files (--no-filesystems because it is handled by disko, --root so we create them in /mnt/etc/nixos)
 sudo nixos-generate-config --no-filesystems --root /mnt
+
+
+
+# Fetch system flake
+
+# Copy generated hardware-configuration.nix
+
+
 
 # Convert generated nixos dir into flake (with disko and home-manager support etc.)
 rm -f "/tmp/flake.nix"
