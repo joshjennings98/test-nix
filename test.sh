@@ -279,7 +279,8 @@ cat << EOF > "/tmp/impermanence.nix"
   umount /btrfs_tmp
   '';
 
-  environment.persistence."/persistent" = {
+  fileSystems."/persist".neededForBoot = true;
+  environment.persistence."/persist" = {
     hideMounts = true;
     directories = [
       "/var/log"
