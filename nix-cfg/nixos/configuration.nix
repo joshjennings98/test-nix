@@ -26,7 +26,7 @@
   environment.etc =
     lib.mapAttrs'
     (name: value: {
-      name = "nix/path/\${name}";
+      name = "nix/path/${name}";
       value.source = value.flake;
     })
     config.nix.registry;
@@ -65,7 +65,7 @@
     enable = true;
     settings = {
       default_session = {
-        command = "\${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd sway";
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd sway";
       };
     };
   };
