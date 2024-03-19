@@ -94,7 +94,7 @@ sudo nixos-generate-config --no-filesystems --root /mnt
 rm -rf $HOME/nix-cfg
 mkdir $HOME/nix-cfg
 cd $HOME/nix-cfg
-sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#Ganymede
+sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#nix-cfg
 
 # Copy generated hardware-configuration.nix and disko.nix
 sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-cfg/nixos/
