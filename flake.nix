@@ -1,35 +1,39 @@
 {
-  description = "NixOS + standalone home-manager config flakes to get you started!";
+  description = "Josh's NixOS Config";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs"; # use the same version of nixpkgs as specified in the current flake 
+    };
+
+    impermanence.url = "github:nix-community/impermanence";
+
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = {nixpkgs, ...}: let
-    forAllSystems = nixpkgs.lib.genAttrs [
-      "aarch64-linux"
-      "i686-linux"
-      "x86_64-linux"
-      "aarch64-darwin"
-      "x86_64-darwin"
-    ];
+  outputs = {
+    self,
+    nixpkgs,
+    home-manager,
+    ...
+  } @ inputs: let
+    inherit (self) outputs;
   in {
-    templates = {
-      minimal = {
-        description = ''
-          Minimal flake - contains only the configs.
-          Contains the bare minimum to migrate your existing legacy configs to flakes.
-        '';
-        path = ./minimal;
-      };
-      standard = {
-        description = ''
-          Standard flake - augmented with boilerplate for custom packages, overlays, and reusable modules.
-          Perfect migration path for when you want to dive a little deeper.
-        '';
-        path = ./standard;
-      };
+    # Reload with 'nixos-rebuild --flake .#Ganymede'
+    nixosConfigurations = {
+      Ganymede = nixpkgs.lib.nixosSystem {
+        specialArgs = { inherit inputs outputs; };
+        modules = [
+          ./configuration.nix
+        ];
+      }; 
     };
-    formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.alejandra);
   };
 }
+
