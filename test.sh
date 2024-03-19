@@ -104,4 +104,4 @@ sudo cp /tmp/disko.nix $HOME/nix-cfg/nixos/
 sudo nixos-install --root /mnt --flake '.#Ganymede'
 
 # Copy nix config to /persist
-sudo cp -r $HOME/nix-cfg $HOME/nix-cfg
+sudo cp -r $HOME/nix-cfg/ /mnt/persist/home/josh/
