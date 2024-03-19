@@ -30,7 +30,7 @@
       Ganymede = nixpkgs.lib.nixosSystem {
         specialArgs = { inherit inputs outputs; };
         modules = [
-          ./configuration.nix
+          ./nixos/configuration.nix
         ];
       }; 
     };
