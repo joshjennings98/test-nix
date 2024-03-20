@@ -10,7 +10,11 @@
     inputs.impermanence.nixosModules.home-manager.impermanence
   ];
 
+  programs.home-manager.enable = true;
+
   home.stateVersion = "23.11"; # Please read the comment before changing.
+
+  home.homeDirectory = "/home/josh";
 
   home.persistence."/persist/home/josh" = {
     directories = [
