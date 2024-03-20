@@ -8,6 +8,8 @@
     ./disko.nix
 
     ./impermanence.nix
+
+    ./home-manager.nix
   ];
 
   # Global nixpkgs settings
