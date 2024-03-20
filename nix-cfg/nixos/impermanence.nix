@@ -50,7 +50,7 @@
       "/etc/machine-id"
       { file = "/var/keys/secret_file"; parentDirectory = { mode = "u=rwx,g=,o="; }; }
     ];
-    # users.josh = {
+    users.josh = {};
     #   directories = [
     #     "Downloads"
     #     "Music"
