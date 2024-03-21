@@ -1,0 +1,3 @@
+# Enforce these being created on a per system basis
+./nix-cfg/nixos/hardware-configuration.nix
+./nix-cfg/nixos/disko.nix
