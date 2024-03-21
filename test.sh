@@ -100,6 +100,9 @@ sudo nix --experimental-features "nix-command flakes" flake init -t github:joshj
 sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
 sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
 
+sudo mkdir -p /mnt/persist/system
+sudo mkdir -p /mnt/persist/home/josh
+
 # Run the installation
 sudo nixos-install --root /mnt --flake '.#Ganymede'
 
