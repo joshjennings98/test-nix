@@ -1,12 +1,12 @@
 {
-  description = "Base flake";
+  description = "Josh's NixOS configs";
   outputs = { self }: {
     templates = {
-      nix-cfg = {
-        path = ./nix-cfg;
-        description = "Nix configuration";
+      Ganymede = {
+        path = ./Ganymede;
+        description = "NixOS configuration for Ganymede";
       };
     };
-    defaultTemplate = self.templates.nix-cfg;
+    defaultTemplate = self.templates.Ganymede;
   };
 }

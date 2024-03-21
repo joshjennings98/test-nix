@@ -74,6 +74,11 @@ cat << EOF > "/tmp/disko.nix"
                   mountOptions = ["subvol=nix" "noatime"];
                   mountpoint = "/nix";
                 };
+
+                "/home" = {
+                  mountOptions = ["subvol=nix" "noatime"];
+                  mountpoint = "/home";
+                };
               };
             };
           };
@@ -91,17 +96,17 @@ sudo nix --experimental-features "nix-command flakes" run github:nix-community/d
 sudo nixos-generate-config --no-filesystems --root /mnt
 
 # Fetch system flake
-rm -rf $HOME/nix-cfg
-mkdir $HOME/nix-cfg
-cd $HOME/nix-cfg
-sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#nix-cfg
+rm -rf $HOME/nix-config
+mkdir $HOME/nix-config
+cd $HOME/nix-config
+sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix/$1#Ganymede
 
 # Copy generated hardware-configuration.nix and disko.nix
-sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-cfg/nixos/
-sudo cp /tmp/disko.nix $HOME/nix-cfg/nixos/
+sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
+sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
 
 # Run the installation
 sudo nixos-install --root /mnt --flake '.#Ganymede'
 
 # Copy nix config to /persist
-sudo cp -r $HOME/nix-cfg/ /mnt/persist/home/josh/
+sudo cp -r $HOME/nix-config/ /mnt/persist/home/josh/

@@ -9,7 +9,7 @@
 
     ./impermanence.nix
 
-    ./home-manager.nix
+    ./users.nix
   ];
 
   # Global nixpkgs settings
@@ -48,19 +48,6 @@
   boot.kernelParams = [
     "quiet" # Don't print SystemD startup stuff
   ];
-
-  # System-wide user settings (groups, etc.)
-  users.users = {
-    josh = {
-      initialPassword = "password"; # Be sure to change me (using passwd)
-      isNormalUser = true;
-      openssh.authorizedKeys.keys = [
-        # Add SSH public key(s) here.
-      ];
-      extraGroups = [ "networkmanager" "wheel" "docker" ];
-      shell = pkgs.fish;
-    };
-  };
 
   # Use greetd (CLI greeter) for login
   services.greetd = {

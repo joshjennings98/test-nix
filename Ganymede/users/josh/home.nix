@@ -1,6 +1,7 @@
 { inputs, lib, config, pkgs, ... }: 
 let
-    config = ./. + "/../config/";
+    config = ./. + "/configs/";
+    assets = ./. + "/assets/";
 in 
 {
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
@@ -93,6 +94,11 @@ in
   };
 
   programs.tmux.enable = true;
+
+  programs.wpaperd = {
+    enable = true;
+    settings.default.path = "${assets}/wallpaper.jpg";
+  };
 
   programs.zathura.enable = true;
 
