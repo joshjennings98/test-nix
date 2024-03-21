@@ -6,6 +6,7 @@ in
 {
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = with inputs; [
+    inputs.impermanence.nixosModules.home-manager.impermanence
   ];
 
   nixpkgs = {
@@ -19,6 +20,29 @@ in
   home = {
     username = "josh";
     homeDirectory = "/home/josh";
+  };
+
+  home.persistence."/persist/home/josh" = {
+    directories = [
+      "Downloads"
+      "Music"
+      "Pictures"
+      "Documents"
+      "Videos"
+      "nix-config"
+      ".gnupg"
+      ".ssh"
+      ".local/share/keyrings"
+      ".local/share/direnv"
+      {
+        directory = ".local/share/Steam";
+        method = "symlink";
+      }
+    ];
+    files = [
+      ".screenrc"
+    ];
+    allowOther = true;
   };
 
   programs.home-manager.enable = true;

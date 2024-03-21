@@ -74,11 +74,6 @@ cat << EOF > "/tmp/disko.nix"
                   mountOptions = ["subvol=nix" "noatime"];
                   mountpoint = "/nix";
                 };
-
-                "/home" = {
-                  mountOptions = ["subvol=nix" "noatime"];
-                  mountpoint = "/home";
-                };
               };
             };
           };
@@ -104,6 +99,9 @@ sudo nix --experimental-features "nix-command flakes" flake init -t github:joshj
 # Copy generated hardware-configuration.nix and disko.nix
 sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
 sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
+
+sudo mkdir -p /mnt/persist/system
+sudo mkdir -p /mnt/persist/home/josh
 
 # Run the installation
 sudo nixos-install --root /mnt --flake '.#Ganymede'
