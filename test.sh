@@ -74,11 +74,6 @@ cat << EOF > "/tmp/disko.nix"
                   mountOptions = ["subvol=nix" "noatime"];
                   mountpoint = "/nix";
                 };
-
-                "/home" = {
-                  mountOptions = ["subvol=nix" "noatime"];
-                  mountpoint = "/home";
-                };
               };
             };
           };

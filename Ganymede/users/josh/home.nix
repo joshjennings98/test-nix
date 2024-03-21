@@ -22,7 +22,7 @@ in
     homeDirectory = "/home/josh";
   };
 
-  home.persistence."/home/josh" = {
+  home.persistence."/persist/home" = {
     directories = [
       "Downloads"
       "Music"

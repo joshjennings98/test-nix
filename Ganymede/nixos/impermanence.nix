@@ -36,7 +36,7 @@
   '';
 
   fileSystems."/persist".neededForBoot = true;
-  environment.persistence."/persist" = {
+  environment.persistence."/persist/system" = {
     hideMounts = true;
     directories = [
       "/var/log"
