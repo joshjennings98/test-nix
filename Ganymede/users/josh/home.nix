@@ -17,33 +17,33 @@ in
     };
   };
 
-  home = {
-    username = "josh";
-    homeDirectory = "/home/josh";
-  };
-
-  # home.persistence."/persist/home/josh" = {
-  #   directories = [
-  #     "Downloads"
-  #     "Music"
-  #     "Pictures"
-  #     "Documents"
-  #     "Videos"
-  #     "nix-config"
-  #     ".gnupg"
-  #     ".ssh"
-  #     ".local/share/keyrings"
-  #     ".local/share/direnv"
-  #     {
-  #       directory = ".local/share/Steam";
-  #       method = "symlink";
-  #     }
-  #   ];
-  #   files = [
-  #     ".screenrc"
-  #   ];
-  #   allowOther = true;
+  # home = {
+  #   username = "josh";
+  #   homeDirectory = "/home/josh";
   # };
+
+  home.persistence."/persist/home/josh" = {
+    directories = [
+      "Downloads"
+      "Music"
+      "Pictures"
+      "Documents"
+      "Videos"
+      "nix-config"
+      ".gnupg"
+      ".ssh"
+      ".local/share/keyrings"
+      ".local/share/direnv"
+      {
+        directory = ".local/share/Steam";
+        method = "symlink";
+      }
+    ];
+    files = [
+      ".screenrc"
+    ];
+    allowOther = true;
+  };
 
   programs.home-manager.enable = true;
 
