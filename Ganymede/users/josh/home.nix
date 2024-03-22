@@ -29,7 +29,6 @@ in
       "Pictures"
       "Documents"
       "Videos"
-      "nix-config"
       ".gnupg"
       ".ssh"
       ".local/share/keyrings"

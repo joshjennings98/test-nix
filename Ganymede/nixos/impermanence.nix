@@ -54,7 +54,8 @@
     ];
     users.josh = {
       directories = [
-        ".local/state/nix/profiles" # Needed for home-manager impermanence module to work
+        ".local/state/nix/profiles" # needed for home-manager impermanence module to work
+        { directory = "nix-config"; user = "josh"; group = "users"; mode = "u=rwx,g=rx,o=rx"; } # persist nix config files
       ];
     };
   };
