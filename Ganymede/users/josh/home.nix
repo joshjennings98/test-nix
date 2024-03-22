@@ -60,6 +60,8 @@ in
     yt-dlp
   ];
 
+  home.file.".config/tofi/config".source = "${config}/config.tofi"; # no home-manager options for tofi
+
   programs.fish = {
     enable = true;
     interactiveShellInit = builtins.readFile "${config}/config.fish";
@@ -132,7 +134,10 @@ in
 
   services.mako.enable = true;
 
-  #services.mpd.enable = true; # TODO: fix this breaking on musicDirectory things
+  services.mpd = {
+    enable = true;
+    musicDirectory = "/home/josh/Music";
+  };
 
   services.pasystray.enable = true;
 
