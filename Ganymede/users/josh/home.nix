@@ -17,10 +17,10 @@ in
     };
   };
 
-  # home = {
-  #   username = "josh";
-  #   homeDirectory = "/home/josh";
-  # };
+  home = {
+    username = "josh";
+    homeDirectory = "/home/josh";
+  };
 
   home.persistence."/persist/home/josh" = {
     directories = [

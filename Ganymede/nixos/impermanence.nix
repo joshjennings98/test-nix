@@ -54,7 +54,7 @@
     ];
     users.josh = {
       directories = [
-        ".local/state/nix/profiles"
+        ".local/state/nix/profiles" # Needed for home-manager impermanence module to work
       ];
     };
   };
