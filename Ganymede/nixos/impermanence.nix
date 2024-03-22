@@ -42,15 +42,16 @@
     hideMounts = true;
     directories = [
       "/var/log"
+      "/var/cache/tuigreet"
       "/var/lib/bluetooth"
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/etc/NetworkManager/system-connections"
-      { directory = "/var/lib/colord"; user = "colord"; group = "colord"; mode = "u=rwx,g=rx,o="; }
     ];
     files = [
       "/etc/machine-id"
-      { file = "/var/keys/secret_file"; parentDirectory = { mode = "u=rwx,g=,o="; }; }
+      { file = "/etc/passwd"; }
+      { file = "/etc/shadow"; group = "shadow"; }
     ];
     users.josh = {
       directories = [
