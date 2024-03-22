@@ -1,12 +1,15 @@
 { inputs, lib, config, pkgs, ... }: 
 let
-    config = ./. + "/configs/";
-    assets = ./. + "/assets/";
+  config = ./. + "/configs/";
+  assets = ./. + "/assets/";
+
+  sway-bar = import ./sway-bar.nix { inherit pkgs; };
 in 
 {
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = with inputs; [
     inputs.impermanence.nixosModules.home-manager.impermanence
+    ./firefox.nix
   ];
 
   nixpkgs = {
@@ -53,6 +56,7 @@ in
     iosevka
     jq
     obsidian
+    sway-bar
     tofi
     tree
     typst
@@ -158,6 +162,7 @@ in
         terminal = "LIBGL_ALWAYS_SOFTWARE=true GALLIUM_DRIVER=llvmpipe kitty"; # so kitty works in virtualbox
         menu = "tofi-run | xargs swaymsg exec";
         bars = [{ 
+          statusCommand = "${sway-bar}/bin/sway-bar";
           position = "top";
           fonts = {
             names = [ "Iosevka" ];
