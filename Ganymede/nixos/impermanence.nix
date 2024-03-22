@@ -35,8 +35,10 @@
   umount /btrfs_tmp
   '';
 
+  programs.fuse.userAllowOther = true;
+
   fileSystems."/persist".neededForBoot = true;
-  environment.persistence."/persist/" = {
+  environment.persistence."/persist" = {
     hideMounts = true;
     directories = [
       "/var/log"
@@ -53,7 +55,7 @@
     users.josh = {
       directories = [
         ".local/state/nix/profiles"
-      ]
+      ];
     };
   };
 }
