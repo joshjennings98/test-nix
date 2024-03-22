@@ -10,14 +10,12 @@
     };
   };
 
-  # System-wide user settings (groups, etc.)
+  users.mutableUsers = false;
   users.users = {
     josh = {
-      initialPassword = "password"; # Be sure to change me (using passwd)
+      hashedPasswordFile = "/persist/passwords/josh";
       isNormalUser = true;
-      openssh.authorizedKeys.keys = [
-        # Add SSH public key(s) here.
-      ];
+      openssh.authorizedKeys.keys = []; # add SSH public key(s) here
       extraGroups = [ "networkmanager" "wheel" "docker" ];
       shell = pkgs.fish;
     };

@@ -41,6 +41,7 @@
   environment.persistence."/persist" = {
     hideMounts = true;
     directories = [
+      "/passwords"
       "/var/log"
       "/var/cache/tuigreet"
       "/var/lib/bluetooth"
@@ -50,8 +51,6 @@
     ];
     files = [
       "/etc/machine-id"
-      { file = "/etc/passwd"; }
-      { file = "/etc/shadow"; group = "shadow"; }
     ];
     users.josh = {
       directories = [
@@ -60,4 +59,9 @@
       ];
     };
   };
+
+  security.sudo.extraConfig = ''
+    # rollback results in sudo lectures after each reboot
+    Defaults lecture = never
+  '';
 }

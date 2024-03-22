@@ -100,8 +100,13 @@ sudo nix --experimental-features "nix-command flakes" flake init -t github:joshj
 sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
 sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
 
+# Hash user password to file
+sudo mkdir -p /mnt/persist/passwords
+mkpasswd -m sha-512 | sudo tee /mnt/persist/passwords/josh > /dev/null
+
 # Run the installation
 sudo nixos-install --root /mnt --flake '.#Ganymede'
 
 # Copy nix config to /persist
 sudo cp -r $HOME/nix-config/ /mnt/persist/home/josh/
+
