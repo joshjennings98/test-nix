@@ -1,7 +1,7 @@
 { inputs, lib, config, pkgs, ... }: 
 let
-  config = ./. + "/configs/";
-  assets = ./. + "/assets/";
+  config = ./. + "/../configs/";
+  assets = ./. + "/../assets/";
 
   sway-bar = import ./sway-bar.nix { inherit pkgs; };
 in 

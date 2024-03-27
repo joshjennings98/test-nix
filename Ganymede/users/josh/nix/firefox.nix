@@ -1,6 +1,6 @@
 { pkgs, inputs, ... }:
 let
-  userChrome = ./. + "/configs/userChrome.css";
+  userChrome = ./. + "/../assets/userChrome.css";
 in 
 {
   programs.firefox = {

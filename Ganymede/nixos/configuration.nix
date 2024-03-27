@@ -9,6 +9,8 @@
 
     ./impermanence.nix
 
+    ./nvidia.nix
+
     ./users.nix
   ];
 
@@ -59,9 +61,14 @@
     };
   };
 
-  # Homemanager can't manage default shell and sway needs to be available for greetd
+  # USB daemons
+  services.gvfs.enable = true;
+  services.udisks2.enable = true;
+
+  # Homemanager can't manage default shell and sway needs to be available for greetd. Steam also needs to be global
   programs.fish.enable = true;
   programs.sway.enable = true;
+  programs.steam.enable = true;
 
   # Global environment variables
   environment.sessionVariables = rec {
