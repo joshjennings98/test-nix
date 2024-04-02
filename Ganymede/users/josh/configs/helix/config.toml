@@ -1,0 +1,21 @@
+# josh's helix config
+
+theme = "gruvbox"
+
+[editor]
+mouse                    = false
+idle-timeout             = 0
+completion-timeout       = 5
+completion-trigger-len   = 1
+statusline.right         = ["register", "spacer", "version-control", "spacer", "workspace-diagnostics", "diagnostics"]
+lsp.display-inlay-hints  = true
+cursor-shape.insert      = "bar"
+file-picker.hidden       = false
+indent-guides.render     = true
+soft-wrap.enable         = true
+soft-wrap.wrap-indicator = ""
+
+[keys.normal]
+g.o         = "jump_backward"
+g.O         = "jump_forward"
+esc         = "keep_primary_selection"

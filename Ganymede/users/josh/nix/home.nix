@@ -64,11 +64,11 @@ in
     yt-dlp
   ];
 
-  home.file.".config/tofi/config".source = "${config}/config.tofi"; # no home-manager options for tofi
+  home.file.".config/tofi/config".source = "${config}/tofi/tofi.conf"; # no home-manager options for tofi
 
   programs.fish = {
     enable = true;
-    interactiveShellInit = builtins.readFile "${config}/config.fish";
+    interactiveShellInit = builtins.readFile "${config}/fish/config.fish";
   };
 
   programs.fzf.enable = true;
@@ -78,6 +78,14 @@ in
     userName = "Josh";
     userEmail = "josh@joshj.dev";
     extraConfig.push.autoSetupRemote = true;
+  };
+
+  programs.helix = {
+    enable = true;
+    defaultEditor = true;
+    settings = lib.importTOML "${config}/helix/config.toml";    
+    languages = lib.importTOML "${config}/helix/languages.toml";    
+    themes = lib.importTOML "${config}/helix/themes/gruvbox.toml";    
   };
 
   programs.imv.enable = true;
