@@ -56,7 +56,7 @@
     enable = true;
     settings = {
       default_session = {
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd sway";
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'sway --unsupported-gpu'"; # --unsupported-gpu for use with nvidia drivers
       };
     };
   };
@@ -65,14 +65,25 @@
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
+  # Audio
+  hardware.pulseaudio.enable = true;
+
   # Homemanager can't manage default shell and sway needs to be available for greetd. Steam also needs to be global
   programs.fish.enable = true;
   programs.sway.enable = true;
   programs.steam.enable = true;
 
+  # Other packages that should be available globally
+  environment.systemPackages = with pkgs; [
+    ncpamixer # ncurses pulse audio mixer
+    networkmanager # install the useful software for network manager (nmtui etc.)
+  ];
+
   # Global environment variables
   environment.sessionVariables = rec {
-    WLR_NO_HARDWARE_CURSORS = "1"; # for sway/wayland in virtualbox
+    WLR_NO_HARDWARE_CURSORS = "1"; # fix missing cursors in sway/wayland when using nvidia drivers
+    WLR_RENDERER = "vulkan"; # supposedly prevent screen flickering with nvidia drivers in sway/wayland
+    XWAYLAND_NO_GLAMOR = "1"; # also supposedly sorts out the screen flickering with nvidia drivers
   };
 
   # Networking stuff
@@ -95,4 +106,3 @@
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
   system.stateVersion = "23.11";
 }
-

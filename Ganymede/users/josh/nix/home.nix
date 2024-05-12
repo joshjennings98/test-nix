@@ -9,6 +9,7 @@ in
   # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = with inputs; [
     inputs.impermanence.nixosModules.home-manager.impermanence
+
     ./firefox.nix
   ];
 
@@ -36,6 +37,7 @@ in
       ".ssh"
       ".local/share/keyrings"
       ".local/share/direnv"
+      ".mozilla/firefox/josh" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       {
         directory = ".local/share/Steam";
         method = "symlink";
@@ -43,6 +45,7 @@ in
     ];
     files = [
       ".screenrc"
+      ".local/share/fish/fish_history"
     ];
     allowOther = true;
   };
@@ -150,8 +153,6 @@ in
     enable = true;
     musicDirectory = "/home/josh/Music";
   };
-
-  services.pasystray.enable = true;
 
   services.swayidle = {
     enable = true;
