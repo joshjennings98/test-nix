@@ -37,6 +37,7 @@ in
       ".ssh"
       ".local/share/keyrings"
       ".local/share/direnv"
+      ".config/pulse" # let pulseaudio maintain its cache for things like volume etc. (even though it is .config...)
       ".mozilla/firefox/josh" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       {
         directory = ".local/share/Steam";
@@ -45,7 +46,7 @@ in
     ];
     files = [
       ".screenrc"
-      ".local/share/fish/fish_history"
+      ".local/share/fish/fish_history" # persist fish history
     ];
     allowOther = true;
   };
