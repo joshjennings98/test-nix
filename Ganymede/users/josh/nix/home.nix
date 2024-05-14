@@ -59,6 +59,7 @@ in
     go
     iosevka
     jq
+    keepassxc
     obsidian
     sway-bar
     tofi
