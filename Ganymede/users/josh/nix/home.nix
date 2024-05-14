@@ -90,7 +90,6 @@ in
     defaultEditor = true;
     settings = lib.importTOML "${config}/helix/config.toml";    
     languages = lib.importTOML "${config}/helix/languages.toml";    
-    #themes = lib.importTOML "${config}/helix/themes/gruvbox.toml";    
   };
 
   programs.imv.enable = true;
