@@ -138,7 +138,7 @@ in
 
   programs.wpaperd = {
     enable = true;
-    settings.default.path = "${assets}/wallpaper.jpg";
+    settings.default.path = "${assets}/wallpaper.png";
   };
 
   programs.zathura.enable = true;
