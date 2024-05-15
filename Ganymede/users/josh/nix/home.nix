@@ -57,9 +57,13 @@ in
     babashka
     discord
     go
+    gopls
+    golangci-lint
+    golangci-lint-langserver
     iosevka
     jq
     keepassxc
+    nil
     obsidian
     sway-bar
     tofi
