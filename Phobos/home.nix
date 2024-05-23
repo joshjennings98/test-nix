@@ -13,19 +13,24 @@ in
     awscli2
     black
     continuous-delivery-scripts
+    python312Packages.detect-secrets
     dockerfile-language-server-nodejs
     go
     golangci-lint
     golangci-lint-langserver
     gopls
+    goreleaser
+    gruvbox-dark-gtk
     iosevka
     keepassxc
     kubectl
+    mockgen
     nil
     nixgl.nixGLIntel
     nodePackages.bash-language-server
     pyright
     tree
+    xfce.thunar
     yaml-language-server
     yq-go
   ];
@@ -111,6 +116,19 @@ in
         terminal = false;
         categories = [ "Utility" ];
       };
+    };
+  };
+
+  # This will need the equivalen of 'programs.dconf.enable = true;' on whatever system this is run on
+  gtk = {
+    enable = true;
+    font = {
+      name = "Iosevka";
+      size = 10;
+    };
+    theme = {
+      name = "gruvbox-dark";
+      package = "${pkgs.gruvbox-dark-gtk}";
     };
   };
 
