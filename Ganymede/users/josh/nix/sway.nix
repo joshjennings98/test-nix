@@ -59,7 +59,7 @@ in
         config = rec {
           modifier = "Mod1";
           terminal = "kitty";
-          menu = "tofi-run | xargs swaymsg exec";
+          menu = "tofi-run | xargs swaymsg exec"; # todo: improve this so that only actual (.desktop) programs are shown (like i3-dmenu-desktop)
           bars = [{ 
             statusCommand = "${pkgs.statusbar}/bin/statusbar";
             position = "top";
@@ -71,6 +71,7 @@ in
           startup = [ 
             { command = "wpaperd"; }
             { command = "cliphist wipe"; }
+            { command = "i3-workspace-names-daemon"; }
           ];
           window = {
             border = 2;

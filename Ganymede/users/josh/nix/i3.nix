@@ -57,6 +57,7 @@ in
         startup = [ 
           { command = "feh --bg-scale ${cfg.assetOverride}/wallpaper.png"; }
           { command = "xautolock -time 10 -locker 'i3lock -c 000000'"; } # todo: work out why 'services.screen-locker' doesn't work
+          { command = "i3-workspace-names-daemon"; }
         ];
         window = {
           border = 2;

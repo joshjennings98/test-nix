@@ -5,17 +5,15 @@ in
 {
   nixpkgs = {
     overlays = [
-      (final: pre: {
-        statusbar = pre.callPackage (import ./statusbar.nix) { inherit pkgs; };
-      })
-    ]; # Add overlays here either from flakes or inline (see https://github.com/Misterio77/nix-starter-configs/blob/main/minimal/nixos/configuration.nix and https://github.com/Misterio77/nix-config/tree/main/overlays) 
+      (final: pre: { statusbar = pre.callPackage (import ./statusbar.nix) { inherit pkgs; }; })
+      (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix) { inherit pkgs lib; }; })
+    ]; 
     config = {
       allowUnfree = true;
       allowUnfreePredicate = _: true; # nix-community/home-manager/issues/2942
     };
   };
 
-  # Import other home-manager modules here (either via flakes like inputs.xxx.yyy or directly like ./zzz.nix)
   imports = [
     inputs.impermanence.nixosModules.home-manager.impermanence
 
@@ -88,6 +86,7 @@ in
     nodePackages.bash-language-server
     obsidian
     pyright
+    pythonScripts.workspaceNames
     spotify
     statusbar
     tree
