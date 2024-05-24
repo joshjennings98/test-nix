@@ -56,31 +56,59 @@
     enable = true;
     settings = {
       default_session = {
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'sway --unsupported-gpu'"; # --unsupported-gpu for use with nvidia drivers
+        # command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'sway'"; # sway
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'startx ${pkgs.i3}/bin/i3'"; # i3
       };
     };
   };
 
-  # USB daemons
+  # i3 support since wayland isn't great on nvidia GPUs
+  services.xserver = {
+    enable = true;
+    windowManager.i3.enable = true;
+    displayManager.startx.enable = true; # don't install xorg or startx manually, this will do all configuration etc.
+  };
+  services.displayManager = {
+    defaultSession = "none+i3";
+  };
+  # programs.sway.enable = true; # no point enabling whilst it isn't used
+
+  # USB stuff
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
   # Audio
   hardware.pulseaudio.enable = true;
 
-  # Homemanager can't manage default shell and sway needs to be available for greetd. Steam also needs to be global
+  # Homemanager can't manage default system shell
   programs.fish.enable = true;
-  programs.sway.enable = true;
-  programs.steam.enable = true;
+
+  # For some reason you need to set steam globally
+  programs.steam = {
+    enable = true;
+    gamescopeSession.enable = true;
+  };
+
+  # Disable x11-ssh-askpass
+  programs.ssh.enableAskPassword = false;
+
+  # Needed for GTK settings
+  programs.dconf.enable = true;
 
   # Other packages that should be available globally
   environment.systemPackages = with pkgs; [
-    ncpamixer # ncurses pulse audio mixer
+    pavucontrol # pulse audio mixer
     networkmanager # install the useful software for network manager (nmtui etc.)
   ];
 
+  # Fonts need to be set up in fonts.packages
+  fonts.packages = with pkgs; [
+    ubuntu_font_family
+    iosevka
+  ];
+
   # Global environment variables
-  environment.sessionVariables = rec {
+  environment.sessionVariables = {
     WLR_NO_HARDWARE_CURSORS = "1"; # fix missing cursors in sway/wayland when using nvidia drivers
     WLR_RENDERER = "vulkan"; # supposedly prevent screen flickering with nvidia drivers in sway/wayland
     XWAYLAND_NO_GLAMOR = "1"; # also supposedly sorts out the screen flickering with nvidia drivers

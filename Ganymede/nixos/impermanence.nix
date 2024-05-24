@@ -23,7 +23,7 @@
     for i in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
       delete_subvolume_recursively "/btrfs_tmp/$i"
     done
-    btrfs subvolume delete "$1"
+    btrfs subvolume delete "$1" || exit 1
   }
 
   for i in $(find /btrfs_tmp/old_roots/ -maxdepth 1 -mtime +7); do
