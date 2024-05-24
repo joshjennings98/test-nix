@@ -25,27 +25,38 @@ import (
 func main() {
 	if conn, err := dbus.SessionBus(); err == nil {
 		barista.Add(funcs.Every(time.Second, func(s bar.Sink) {
-			obj := conn.Object("org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2")
-			metadataProps := obj.Call("org.freedesktop.DBus.Properties.Get", 0, "org.mpris.MediaPlayer2.Player", "Metadata")
+			var obj dbus.BusObject
+			var metadataProps *dbus.Call
+			obj = conn.Object("org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2")
+			metadataProps = obj.Call("org.freedesktop.DBus.Properties.Get", 0, "org.mpris.MediaPlayer2.Player", "Metadata")
 			if metadataProps.Err != nil {
-				s.Output(nil)
-				return
+				obj = conn.Object("org.mpris.MediaPlayer2.mpd", "/org/mpris/MediaPlayer2")
+				metadataProps = obj.Call("org.freedesktop.DBus.Properties.Get", 0, "org.mpris.MediaPlayer2.Player", "Metadata")
+				if metadataProps.Err != nil {
+					s.Output(nil)
+					return
+				}
 			}
 
 			metadata := metadataProps.Body[0].(dbus.Variant).Value().(map[string]dbus.Variant)
 
-			artistStr := "No Artist"
+			var artistStr string
 			if artist, ok := metadata["xesam:artist"]; ok {
 				if artistStrLst := artist.Value().([]string); len(artistStrLst) > 0 {
 					artistStr = artistStrLst[0]
 				}
 			}
 
-			titleStr := "No Title"
+			var titleStr string
 			if title, ok := metadata["xesam:title"]; ok {
 				if s := title.Value().(string); s != "" {
 					titleStr = s
 				}
+			}
+
+			if artistStr == "" && titleStr == "" {
+				s.Output(nil)
+				return
 			}
 
 			playbackProps := obj.Call("org.freedesktop.DBus.Properties.Get", 0, "org.mpris.MediaPlayer2.Player", "PlaybackStatus")

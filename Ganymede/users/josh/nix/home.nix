@@ -52,6 +52,7 @@ in
       ".config/pulse" # pulseaudio
       ".mozilla/firefox/josh" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       ".local/share/Steam"
+      ".local/share/mpd"
       ".local/share/vulkan"
       ".cache/mesa_shader_cache"
       ".config/spotify"
@@ -71,6 +72,7 @@ in
     clojure-lsp
     discord
     dockerfile-language-server-nodejs
+    ffmpeg
     go
     gopls
     golangci-lint
@@ -139,6 +141,8 @@ in
     enable = true;
     musicDirectory = "/home/josh/Music";
   };
+
+  services.mpdris2.enable = true; # needed to use mpd with mpris dbus thingy
 
   gtk = {
     enable = true;
