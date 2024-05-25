@@ -7,9 +7,9 @@ echo "Welcome to:
     \____/ \___/|___/_| |_| |___/   \___\___/|_| |_|_| |_|\__, | (_) |_| |_|___/_| |_|
                                                            __/ |
                                                           |___/
-" > /dev/null
+" >/dev/null
 
-set -gx EDITOR vim
+set -gx EDITOR hx
 
 # commands to run in interactive sessions can go here
 if status is-interactive
@@ -22,7 +22,7 @@ if status is-interactive
     # ctrl + s -> search for string (regex) in files in current directory (recursive)
     bind \cs 'search_files (commandline -b)'
     # placeholder
-    bind \cf 'tmux-sessioniser'
+    bind \cf tmux-sessioniser
 end
 
 #############
@@ -81,7 +81,7 @@ function edit_command_buffer --description "Open the current command buffer in a
     end
 
     set -l p (commandline -C)
-    commandline -b > $f
+    commandline -b >$f
     $EDITOR $f
 
     commandline -r (cat $f)
@@ -90,12 +90,12 @@ function edit_command_buffer --description "Open the current command buffer in a
 end
 
 function mkcd --description "Make a directory (if it doesn't exist) and cd into it"
-    mkdir $argv[1] 2> /dev/null
+    mkdir $argv[1] 2>/dev/null
     cd $argv[1]
 end
 
 function .. --description "Go up N directories"
-   if count $argv > /dev/null
+    if count $argv >/dev/null
         cd (echo '../' | string repeat -n $argv[1])
     else
         cd ..
@@ -103,11 +103,11 @@ function .. --description "Go up N directories"
 end
 
 function envsource --description "Source standard env files using fish"
-  for line in (cat $argv | grep -v '^#' | grep -v '^\s*$')
-    set -l item (string split -m 1 '=' $line)
-    set -gx $item[1] (string trim --chars=\'\" $item[2])
-    echo "Exported key $item[1]"
-  end
+    for line in (cat $argv | grep -v '^#' | grep -v '^\s*$')
+        set -l item (string split -m 1 '=' $line)
+        set -gx $item[1] (string trim --chars=\'\" $item[2])
+        echo "Exported key $item[1]"
+    end
 end
 
 #################
@@ -143,7 +143,7 @@ set -g __fish_git_prompt_hide_untrackedfiles 1
 set fish_prompt_pwd_dir_length 0
 
 set -g __fish_git_prompt_color_branch magenta
-set -g __fish_git_prompt_showupstream "informative"
+set -g __fish_git_prompt_showupstream informative
 set -g __fish_git_prompt_char_upstream_ahead " ↑"
 set -g __fish_git_prompt_char_upstream_behind " ↓"
 set -g __fish_git_prompt_char_upstream_prefix ""

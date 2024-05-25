@@ -68,7 +68,7 @@
     windowManager.i3.enable = true;
     displayManager = {
       startx.enable = true; # don't install xorg or startx manually, this will do all configuration etc.
-      setupCommands = "${pkgs.xorg.xrandr}/bin/xrandr --output DP-0 --mode 3440x1440 --rate 164.90";
+      # setupCommands = "${pkgs.xorg.xrandr}/bin/xrandr --output DP-0 --mode 3440x1440 --rate 164.90"; # todo: isn't working for some reason
     };
   };
   services.displayManager = {

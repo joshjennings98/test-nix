@@ -24,6 +24,7 @@ in
 
     home.packages = with pkgs; [ 
       dmenu
+      shellScripts.xauto_lock_screen
       xautolock # todo: work out why 'services.screen-locker' doesn't work
     ];
     
@@ -56,8 +57,9 @@ in
         }];
         startup = [ 
           { command = "feh --bg-scale ${cfg.assetOverride}/wallpaper.png"; }
-          { command = "xautolock -time 10 -locker 'i3lock -c 000000'"; } # todo: work out why 'services.screen-locker' doesn't work
+          { command = "xautolock -time 10 -locker '${pkgs.shellScripts.xauto_lock_screen}/bin/xauto_lock_screen'"; } # todo: work out why 'services.screen-locker' doesn't work
           { command = "i3-workspace-names-daemon"; }
+          { command = "xrandr --output DP-0 --mode 3440x1440 --rate 164.90"; }
         ];
         window = {
           border = 2;

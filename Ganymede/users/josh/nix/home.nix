@@ -7,6 +7,7 @@ in
     overlays = [
       (final: pre: { statusbar = pre.callPackage (import ./statusbar.nix) { inherit pkgs; }; })
       (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix) { inherit pkgs lib; }; })
+      (final: pre: { shellScripts = pre.callPackage (import ./shell-scripts.nix) { inherit pkgs lib; }; })
     ]; 
     config = {
       allowUnfree = true;
@@ -22,7 +23,7 @@ in
     ./i3.nix
   ];
 
-  # Custom options for ./wayland.nix and ./xorg.nix
+  # Custom options for ./sway.nix and ./i3.nix
   windowManagers.sway.enable = false;
   windowManagers.i3.enable = true;
 
@@ -87,6 +88,7 @@ in
     obsidian
     pyright
     pythonScripts.workspaceNames
+    shellScripts.tmux-sessioniser
     spotify
     statusbar
     tree
@@ -110,6 +112,11 @@ in
     userEmail = "josh@joshj.dev";
     extraConfig.push.autoSetupRemote = true;
     difftastic.enable = true;
+  };
+
+  programs.gh = {
+    enable = true;
+    gitCredentialHelper.enable = true;
   };
 
   programs.helix = {

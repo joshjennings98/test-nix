@@ -72,6 +72,7 @@ in
             { command = "wpaperd"; }
             { command = "cliphist wipe"; }
             { command = "i3-workspace-names-daemon"; }
+            # { command = "xrandr --output DP-0 --mode 3440x1440 --rate 164.90"; } # todo: equivalent of this for wayland
           ];
           window = {
             border = 2;

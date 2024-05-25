@@ -1,7 +1,4 @@
 { pkgs, inputs, ... }:
-let
-  userChrome = ./. + "/../assets/userChrome.css";
-in 
 {
   programs.firefox = {
     enable = true;
@@ -33,7 +30,15 @@ in
         "signon.rememberSignons" = false;
         "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
       };
-      userChrome = builtins.readFile "${userChrome}";
+      userChrome = ''
+        @import "${
+            builtins.fetchGit {
+                url = "https://github.com/rockofox/firefox-minima";
+                ref = "main";
+                rev = "c5580fd04e9b198320f79d441c78a641517d7af5";
+            }
+          }/userChrome.css";
+          '';
     };
   };
 
