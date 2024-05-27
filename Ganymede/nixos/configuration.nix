@@ -51,6 +51,12 @@
     "quiet" # Don't print SystemD startup stuff
   ];
 
+  # NixOS configuration for Star Citizen requirements https://github.com/fufexan/nix-gaming/tree/master/pkgs/star-citizen
+  boot.kernel.sysctl = {
+    "vm.max_map_count" = 16777216;
+    "fs.file-max" = 524288;
+  };
+
   # Use greetd (CLI greeter) for login
   services.greetd = {
     enable = true;
@@ -133,6 +139,7 @@
   i18n = {
     defaultLocale = "en_GB.UTF-8";
   };
+  zramSwap.enable = true; # recommended for star citizen if you have less than 40GB of RAM https://github.com/fufexan/nix-gaming/tree/master/pkgs/star-citizen
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
   system.stateVersion = "23.11";

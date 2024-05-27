@@ -44,10 +44,12 @@ in
       "Pictures"
       "Documents"
       "Videos"
+      "Games"
       ".gnupg"
       ".ssh"
       ".local/share/keyrings"
       ".local/share/direnv"
+      ".cache/wine"
       ".config/pulse" # pulseaudio
       ".mozilla/firefox/josh" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       ".local/share/Steam"
@@ -77,8 +79,9 @@ in
     golangci-lint
     golangci-lint-langserver
     gruvbox-dark-gtk
-    iosevka
     htop
+    inputs.nix-gaming.packages.${pkgs.system}.star-citizen
+    iosevka
     jq
     keepassxc
     lxappearance-gtk2
