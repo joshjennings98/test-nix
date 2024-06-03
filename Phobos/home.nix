@@ -3,7 +3,22 @@ let
   config = ./.;
   homedir = "/home/josjen01";
 
+  # TODO: make these overlays
   continuous-delivery-scripts = import ./continuous-delivery-scripts.nix { inherit pkgs; };
+  detect-secrets-1-0-3 = pkgs.python312Packages.buildPythonPackage {
+      pname = "detect-secrets";
+      version = "1.0.3";
+      buildInputs = with pkgs.python312Packages; [ pip requests pyyaml ];
+      propagatedBuildInputs = [
+        (pkgs.python312.withPackages (ps: with ps; [ pip requests pyyaml ]))
+      ];
+      src = pkgs.fetchFromGitHub {
+        owner = "Yelp";
+        repo = "detect-secrets";
+        rev = "v1.0.3";
+        sha256 = "sha256-O+V0u9urirhFNC7ExMRv5rO7dWbzPexywDdkLNGISIs=";
+      };
+    };
 in
 {
   home.username = "josjen01";
@@ -13,7 +28,8 @@ in
     awscli2
     black
     continuous-delivery-scripts
-    python312Packages.detect-secrets
+    # python312Packages.detect-secrets
+    detect-secrets-1-0-3
     dockerfile-language-server-nodejs
     go
     golangci-lint
@@ -29,6 +45,7 @@ in
     nixgl.nixGLIntel
     nodePackages.bash-language-server
     pyright
+    sops
     tree
     xfce.thunar
     yaml-language-server
@@ -53,30 +70,11 @@ in
       push.autoSetupRemote = true;
     };
     difftastic.enable = true;
-    # Avoid persisting any secrets in plaintext config files. Go needs git to have the secrets set and it might call git multiple times so it needs to
-    # persist throughout the session. Environment variables don't work with .gitconfig so we can't just set it in the environment (also setting it in
-    # the environment would only apply to the subprocess since it won't affect the parent). Expect a tmpfs mount (so it is lost on reboot) and extract
-    # and store the secret in a file on there. This will be accessible for the whole session so it will only have to be decrypted once. It is not
-    # ideal but at least we don't explicitly store the secret in any configuration
-    package = pkgs.writeShellScriptBin "git" ''
-      #!/bin/sh
-      if [ -t 1 ] && [ -e ${homedir}/.secrets ] && [ "$(df --output=fstype ${homedir}/.secrets | tail -n 1)" = "tmpfs" ] && ! [ -e ${homedir}/.secrets/github ]; then
-        GITHUB_VAR=$(keepassxc-cli attachment-export ${homedir}/passwords.kdbx env_secrets github --stdout | grep -v '^#' | awk -F= '{print $2}')
-        if [ -z $GITHUB_VAR ]; then
-          exit 1
-        fi
-        echo $GITHUB_VAR > ${homedir}/.secrets/github
-      fi
-      GITHUB_TOKEN=$(cat ${homedir}/.secrets/github 2> /dev/null)
-      ${pkgs.git}/bin/git \
-        -c url.https://$GITHUB_TOKEN:x-oauth-basic@github.com/Arm-Debug.insteadof=https://github.com/Arm-Debug \
-        "$@"
-    '';
   };
 
   programs.gh = {
     enable = true;
-    gitCredentialHelper.enable = true;
+    gitCredentialHelper.enable = true; # should work for private go modules tool
   };
 
   programs.helix = {
