@@ -80,7 +80,7 @@ in
     golangci-lint-langserver
     gruvbox-dark-gtk
     htop
-    inputs.nix-gaming.packages.${pkgs.system}.star-citizen
+    #inputs.nix-gaming.packages.${pkgs.system}.star-citizen # pkgs.system has problem with its existence when doing nixos-install
     iosevka
     jq
     keepassxc
