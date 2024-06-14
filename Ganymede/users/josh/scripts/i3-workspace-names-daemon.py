@@ -21,6 +21,7 @@ def build_rename(i3, args):
             if name == "foot":
                 return "terminal"
             return name[:length] if name else "?"
+        return "?"
 
     def rename(i3, e):
         workspaces = i3.get_tree().workspaces()
