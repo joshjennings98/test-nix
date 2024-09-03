@@ -1,35 +1,33 @@
 { lib, pkgs, ... }:
 let
   config = ./.;
+  overlays = "${config}/overlays";
   homedir = "/home/josjen01";
-
-  # TODO: make these overlays
-  continuous-delivery-scripts = import ./continuous-delivery-scripts.nix { inherit pkgs; };
-  detect-secrets-1-0-3 = pkgs.python312Packages.buildPythonPackage {
-      pname = "detect-secrets";
-      version = "1.0.3";
-      buildInputs = with pkgs.python312Packages; [ pip requests pyyaml ];
-      propagatedBuildInputs = [
-        (pkgs.python312.withPackages (ps: with ps; [ pip requests pyyaml ]))
-      ];
-      src = pkgs.fetchFromGitHub {
-        owner = "Yelp";
-        repo = "detect-secrets";
-        rev = "v1.0.3";
-        sha256 = "sha256-O+V0u9urirhFNC7ExMRv5rO7dWbzPexywDdkLNGISIs=";
-      };
-    };
 in
 {
+  nixpkgs = {
+    overlays = [
+      (final: pre: { 
+        continuous-delivery-scripts = pre.callPackage ("${overlays}/continuous-delivery-scripts.nix") { inherit pkgs; }; 
+      })
+      (final: pre: { 
+        detect-secrets-1-0-3 = pre.callPackage ("${overlays}/detect-secrets-1-0-3.nix") { inherit pkgs; };
+      })
+    ];
+    config.allowUnfree = true;
+  };
+
   home.username = "josjen01";
   home.homeDirectory = "${homedir}";
 
   home.packages = with pkgs; [
     awscli2
+    bat
     black
     continuous-delivery-scripts
-    # python312Packages.detect-secrets
+    dbeaver-bin
     detect-secrets-1-0-3
+    delve
     dockerfile-language-server-nodejs
     go
     golangci-lint
@@ -40,11 +38,16 @@ in
     iosevka
     keepassxc
     kubectl
+    kubernetes-helm
     mockgen
     nil
     nixgl.nixGLIntel
     nodePackages.bash-language-server
+    openapi-generator-cli
+    python3
+    pipenv # for ease of use with existing projects
     pyright
+    ripgrep
     sops
     tree
     xfce.thunar

@@ -94,18 +94,6 @@ For security reasons I won't include any of the configuration for this so you ma
 
 To get `kubectl` to work you need to configure the cluster access as per the documentation. Then use `kubectl config use-context xxx` to switch to the correct context.
 
-### Tmpfs mounts
-
-Secrets are written to a tmpfs volume when they are first used so that they are available for the session and don't get hardcoded in any configuration files.
-
-This needs a tmpfs mount set up. This can be done manually on every boot or you can add the following to `/etc/fstab`
-
-```
-tmpfs <home directory>/.secrets/ tmpfs defaults 0 1
-```
-
-This way the tmpfs mount will always be available on boot.
-
 ### Wallpaper
 
 I can't seem to easily set this so you must go into the `gnome-settings` and set it manually.
