@@ -4,7 +4,7 @@ let
   parseGhosttyConfig = filepath:
     let
       allLines = lib.strings.splitString "\n" (builtins.readFile filepath);
-      lines = builtins.filter (line: line != "") allLines;
+      lines = builtins.filter (line: (lib.trim line) != "") allLines;
       parseLine = acc: line:
         let
           parts = lib.strings.splitString "=" line;
