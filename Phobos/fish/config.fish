@@ -9,7 +9,7 @@ echo "Welcome to:
                                                           |___/
 " >/dev/null
 
-set -gx EDITOR vim
+set -gx EDITOR hx
 
 # commands to run in interactive sessions can go here
 if status is-interactive
@@ -21,18 +21,13 @@ if status is-interactive
     bind \ce edit_command_buffer
     # ctrl + s -> search for string (regex) in files in current directory (recursive)
     bind \cs 'search_files (commandline -b)'
-    # placeholder
-    bind \cf tmux-sessioniser
 end
 
-#############
-# FUNCTIONS #
-#############
-
+# FUNCTIONS
 function fzf_select_history --description "Search command history using fzf"
     test -n "$FZF_TMUX_HEIGHT"; or set FZF_TMUX_HEIGHT 60%
     begin
-        set -lx FZF_DEFAULT_OPTS "--height 60% --tiebreak=index +m --preview 'echo {}' --preview-window bottom:40%"
+        set -lx FZF_DEFAULT_OPTS "--height 60% --tiebreak=index +m"
         history -z | eval fzf --read0 --print0 -q '(commandline)' | read -lz result
         and commandline -- $result
     end
@@ -62,7 +57,7 @@ function search_files --description "Search for a string (regex) in the files in
                 --reverse \
                 --phony -q "$argv" \
                 --delimiter : \
-                --preview 'batcat --color=always {1} --highlight-line {2} --line-range {2}:' \
+                --preview 'bat --color=always {1} --highlight-line {2} --line-range {2}:' \
                 --bind "change:reload:$RG_PREFIX {q} || true" \
                 --preview-window="up:60%"
     )
@@ -149,35 +144,20 @@ function envsecrets --description "Export env files stored in env_secrets keepas
     end
 end
 
-#################
-# ABBREVIATIONS #
-#################
-
-abbr --add extract tar -xvzf
-abbr --add archive tat -cvzf
-
+# ABBREVIATIONS
 abbr --add newpush git push --set-upstream origin \(git branch --show-current\)
 abbr --add gca git commit --amend --no-edit \&\& git push --force
+abbr --add gcm git commit -m \"\$\(cat \$\(find \"\$\(git rev-parse --show-toplevel\)/changes/\" -type f -exec ls -t1 \{\} + \| head -n 1\)\)\"
 
-###########
-# ALIASES #
-###########
-
+# ALIASES
 alias la='ls -aF' # list all files (including hidden)
 alias ll='ls -lhFBA' # list all files (including hidden) in a human readable way
 alias lr='ls -R' # list EVERYTHING (recursive ls)
-
 alias kctx='kubectl config use-context (kubectl config get-contexts -o name | fzf)' # switch kubernetes context with fzf
 alias ksso='aws sso login --sso-session arm' # log into aws cluster
 
-##########
-# PROMPT #
-##########
-
-# don't show greeting
-set fish_greeting
-
-# git prompt stuff
+# PROMPT
+set fish_greeting # don't show greeting
 set -g __fish_git_prompt_show_informative_status 1 # show info on staged files etc.
 set -g __fish_git_prompt_showuntrackedfiles 1 # show untracked files even though it's slow
 set fish_prompt_pwd_dir_length 0 # show full path
@@ -217,18 +197,11 @@ function fish_prompt
     set_color normal
 end
 
-########
-# PATH #
-########
-
+# PATH
 fish_add_path $HOME/.local/bin
 fish_add_path $HOME/go/bin
 fish_add_path /usr/local/go/bin
 
-kubectl completion fish | source
-
-##########
-# TO RUN #
-##########
-
+# ALWAYS RUN
 go env -w GOPRIVATE=github.com/Arm-Debug
+kubectl completion fish | source

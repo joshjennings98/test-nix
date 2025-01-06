@@ -3,6 +3,8 @@ let
   config = ./.;
   overlays = "${config}/overlays";
   homedir = "/home/josjen01";
+
+  parseGhosttyConfig = (import ./helpers/parseGhostty.nix { inherit lib; });
 in
 {
   nixpkgs = {
@@ -29,6 +31,8 @@ in
     detect-secrets-1-0-3
     delve
     dockerfile-language-server-nodejs
+    emacs
+    fd
     go
     golangci-lint
     golangci-lint-langserver
@@ -42,6 +46,7 @@ in
     mockgen
     nil
     nixgl.nixGLIntel
+    nsjail
     nodePackages.bash-language-server
     openapi-generator-cli
     python3
@@ -49,7 +54,11 @@ in
     pyright
     ripgrep
     sops
+    terraform
+    tflint
+    tilt
     tree
+    typst
     xfce.thunar
     yaml-language-server
     yq-go
@@ -62,6 +71,10 @@ in
     enable = true;
     interactiveShellInit = builtins.readFile "${config}/fish/config.fish";
   };
+  
+  home.file."fish/completions/kubectl".source = "${config}/fish/completions/kubectl"; 
+
+  programs.firefox.enable = true;
   
   programs.fzf.enable = true;
 
@@ -80,6 +93,17 @@ in
     gitCredentialHelper.enable = true; # should work for private go modules tool
   };
 
+  programs.ghostty = {
+    enable = true;
+    enableFishIntegration = true;
+    # Ghostty needs OpenGL to work properly so make the changes to how the binary is executed https://pmiddend.github.io/posts/nixgl-on-ubuntu/
+    package = pkgs.writeShellScriptBin "ghostty-nixgl" ''
+      #!/bin/sh
+      ${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel ${pkgs.ghostty}/bin/ghostty "$@"
+    '';
+    settings = parseGhosttyConfig "${config}/ghostty/config";
+  };
+
   programs.helix = {
     enable = true;
     defaultEditor = true;
@@ -87,40 +111,35 @@ in
     languages = lib.importTOML "${config}/helix/languages.toml";    
   };
 
-  programs.kitty = {
-    enable = true;
-    shellIntegration.enableFishIntegration = true;
-    theme = "Gruvbox Dark";
-    font = {
-      name = "Iosevka";
-      size = 12;
-    };
-    # Kitty needs OpenGL to work properly so make the changes to how the binary is executed https://pmiddend.github.io/posts/nixgl-on-ubuntu/
-    package = pkgs.writeShellScriptBin "kitty" ''
-      #!/bin/sh
-      ${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel ${pkgs.kitty}/bin/kitty "$@"
-    '';
-    settings = {
-      shell = "${pkgs.fish}/bin/fish";
-    };
-    extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
-  };
+  programs.nushell.enable = true;
+
+  programs.zathura.enable = true;
 
   xdg = {
     enable = true;
+    mime.enable = true;
+    systemDirs.data = [ "${homedir}/.nix-profile/share/applications" ];
     desktopEntries = {
-      kitty = {
-        name = "Kitty";
+      ghostty = {
+        name = "Ghostty";
         genericName = "Terminal";
-        exec = "kitty";
-        icon = "${pkgs.kitty}/share/icons/hicolor/256x256/apps/kitty.png";
+        exec = "ghostty-nixgl";
+        icon = "${pkgs.ghostty}/share/icons/hicolor/256x256/apps/com.mitchellh.ghostty.png";
+        terminal = false;
+        categories = [ "Utility" ];
+      };
+      firefox = {
+        name = "Firefox";
+        genericName = "Web Browser";
+        exec = "firefox %U";
+        icon = "${pkgs.firefox}/share/icons/hicolor/128x128/apps/firefox.png";
         terminal = false;
         categories = [ "Utility" ];
       };
     };
   };
 
-  # This will need the equivalen of 'programs.dconf.enable = true;' on whatever system this is run on
+  # This will need the equivalent of 'programs.dconf.enable = true;' on whatever system this is run on
   gtk = {
     enable = true;
     font = {
@@ -133,8 +152,11 @@ in
     };
   };
 
+  # Enable settings to make home-manager work better on non-nixos systems
+  targets.genericLinux.enable = true;
+
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
-  home.stateVersion = "23.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "24.05"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }
