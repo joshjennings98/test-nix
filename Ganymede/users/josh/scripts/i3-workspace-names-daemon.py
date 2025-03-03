@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os.path
 import argparse
 import i3ipc  # This package works for both i3 and Sway
 
@@ -11,52 +10,48 @@ def build_rename(i3, args):
     uniq = args.uniq
 
     def get_name(leaf, length):
-        """
-        Get the name of a window.
-        """
         for identifier in ["app_id", "name", "window_title"]:
             name = getattr(leaf, identifier, None)
-            if name is None:
-                continue
-            if name == "foot":
-                return "terminal"
-            return name[:length] if name else "?"
+            if name and name.strip():
+                return (
+                    name[:length]
+                    .replace(":", "")
+                    .replace("│", "")
+                    .replace("&", "+")
+                    .lower()
+                    .strip()
+                )
         return "?"
 
-    def rename(i3, e):
+    def rename(i3, _):
         workspaces = i3.get_tree().workspaces()
-        workdicts = i3.get_workspaces()
-        visible = [workdict.name for workdict in workdicts if workdict.visible]
-        visworkspaces = []
-        focus = (
-            [workdict.name for workdict in workdicts if workdict.focused] or [None]
-        )[0]
-        focusname = None
+        visible_workspaces = {
+            workspace.name for workspace in i3.get_workspaces() if workspace.visible
+        }
+        focused_workspace = next(
+            (workspace.name for workspace in i3.get_workspaces() if workspace.focused),
+            None,
+        )
 
         commands = []
         for workspace in workspaces:
-            names = [
-                get_name(leaf, length).replace(":", "").replace("│", "").lower().strip()
-                for leaf in workspace.leaves()
-            ]
-
+            names = [get_name(leaf, length) for leaf in workspace.leaves()]
             if uniq:
-                seen = set()
-                names = [x for x in names if x not in seen and not seen.add(x)]
-            names = delim.join(names)
+                names = list(
+                    dict.fromkeys(names)
+                )  # Remove duplicates while preserving order
 
-            newname = f"{workspace.num}: {names} " if names else f"{workspace.num}"
-            if workspace.name in visible:
-                visworkspaces.append(newname)
-            if workspace.name == focus:
-                focusname = newname
+            newname = (
+                f"{workspace.num}: {delim.join(names)}" if names else f"{workspace.num}"
+            )
 
             if workspace.name != newname:
                 old = workspace.name.replace('"', '\\"')
                 new = newname.replace('"', '\\"')
                 commands.append(f'rename workspace "{old}" to "{new}"')
 
-        i3.command(";".join(commands))
+        if commands:
+            i3.command(";".join(commands))
 
     return rename
 

@@ -46,6 +46,9 @@
   boot.loader.grub.efiSupport = true;
   boot.loader.grub.efiInstallAsRemovable = true;
 
+  # Allow mounting of ntfs drives
+  boot.supportedFilesystems = [ "ntfs" ];
+
   # Kernel options
   boot.kernelParams = [
     "quiet" # Don't print SystemD startup stuff
@@ -62,8 +65,7 @@
     enable = true;
     settings = {
       default_session = {
-        # command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'sway'"; # sway
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'startx ${pkgs.i3}/bin/i3'"; # i3
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'startx ${pkgs.i3}/bin/i3'";
       };
     };
   };
@@ -80,14 +82,18 @@
   services.displayManager = {
     defaultSession = "none+i3";
   };
-  # programs.sway.enable = true; # no point enabling whilst it isn't used
+
+  # Bluetooth
+  services.blueman.enable = true;
+  hardware.bluetooth.enable = true; # enables support for Bluetooth
+  hardware.bluetooth.powerOnBoot = true;
 
   # USB stuff
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
   # Audio
-  hardware.pulseaudio.enable = true;
+  services.pulseaudio.enable = false; # PipeWire needs pulseaudio disabled
 
   # Homemanager can't manage default system shell
   programs.fish.enable = true;
@@ -108,19 +114,21 @@
   environment.systemPackages = with pkgs; [
     pavucontrol # pulse audio mixer
     networkmanager # install the useful software for network manager (nmtui etc.)
+    ntfs3g # for ntfs support
   ];
 
   # Fonts need to be set up in fonts.packages
   fonts.packages = with pkgs; [
     ubuntu_font_family
     iosevka
+    font-awesome
   ];
 
   # Global environment variables
   environment.sessionVariables = {
-    WLR_NO_HARDWARE_CURSORS = "1"; # fix missing cursors in sway/wayland when using nvidia drivers
-    WLR_RENDERER = "vulkan"; # supposedly prevent screen flickering with nvidia drivers in sway/wayland
-    XWAYLAND_NO_GLAMOR = "1"; # also supposedly sorts out the screen flickering with nvidia drivers
+    # WLR_NO_HARDWARE_CURSORS = "1"; # fix missing cursors in sway/wayland when using nvidia drivers
+    # WLR_RENDERER = "vulkan"; # supposedly prevent screen flickering with nvidia drivers in sway/wayland
+    # XWAYLAND_NO_GLAMOR = "1"; # also supposedly sorts out the screen flickering with nvidia drivers
   };
 
   # Networking stuff

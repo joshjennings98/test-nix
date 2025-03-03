@@ -190,7 +190,7 @@ func main() {
 		10*time.Second,
 		func(t time.Time) bar.Output {
 			return outputs.
-				Text(t.Format(" Time: 15:04 ")).
+				Text(t.Format(" Mon 02 Jan - 15:04 ")).
 				OnClick(click.RunLeft("i3-nagbar", "-t", "warning", "-m", "Do you want to reboot or shutdown?", "-b", "shutdown", "i3-msg exec shutdown 0", "-b", "reboot", "i3-msg exec reboot"))
 		}))
 

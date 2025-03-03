@@ -4,7 +4,7 @@ pkgs.buildGoModule rec {
     pname = "statusbar";
     version = "0.0.17";
     nativeBuildInputs = [ pkgs.pkg-config ];
-    buildInputs = [ pkgs.alsaLib ];
+    buildInputs = [ pkgs.alsa-lib ];
     vendorHash = "sha256-JnW9163lf0H3xgsVx7xVtc1BAyLg8bq7FPitzE4wamE=";
     src = ../statusbar;  
     meta = with pkgs.lib; {

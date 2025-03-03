@@ -19,19 +19,14 @@ in
     inputs.impermanence.nixosModules.home-manager.impermanence
 
     ./firefox.nix
-    ./sway.nix
     ./i3.nix
   ];
-
-  # Custom options for ./sway.nix and ./i3.nix
-  windowManagers.sway.enable = false;
-  windowManagers.i3.enable = true;
 
   home = {
     username = "josh";
     homeDirectory = "/home/josh";
     pointerCursor = {
-      package = pkgs.gnome.adwaita-icon-theme;
+      package = pkgs.adwaita-icon-theme;
       name = "Adwaita";
       size = 16;
     };
@@ -50,7 +45,7 @@ in
       ".local/share/keyrings"
       ".local/share/direnv"
       ".cache/wine"
-      ".config/pulse" # pulseaudio
+      ".local/state/wireplumber/" # pipewire (if switching to pulseaudio then save ".config/pulse")
       ".mozilla/firefox/josh" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       ".local/share/Steam"
       ".local/share/mpd"
@@ -70,10 +65,14 @@ in
   home.packages = with pkgs; [
     babashka
     black
+    cargo
     clojure-lsp
+    cookiecutter
     discord
     dockerfile-language-server-nodejs
+    fd
     ffmpeg
+    gcc
     go
     gopls
     golangci-lint
@@ -87,19 +86,26 @@ in
     lxappearance-gtk2
     mockgen
     nil
+    nodejs_22
     nodePackages.bash-language-server
     obsidian
+    pagefind
     pyright
     pythonScripts.workspaceNames
-    shellScripts.tmux-sessioniser
+    raylib
+    ripgrep
     spotify
     statusbar
+    tinygo
     tree
     typst
     unzip
+    warpd
     xfce.thunar
     yaml-language-server
     yt-dlp
+    zig
+    zip
   ];
 
   programs.fish = {
@@ -122,13 +128,6 @@ in
     gitCredentialHelper.enable = true;
   };
 
-  programs.helix = {
-    enable = true;
-    defaultEditor = true;
-    settings = lib.importTOML "${config}/helix/config.toml";    
-    languages = lib.importTOML "${config}/helix/languages.toml";    
-  };
-
   programs.kitty = {
     enable = true;
     shellIntegration.enableFishIntegration = true;
@@ -138,7 +137,16 @@ in
     extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
   };
 
+  programs.helix = {
+    enable = true;
+    defaultEditor = true;
+    settings = lib.importTOML "${config}/helix/config.toml";    
+    languages = lib.importTOML "${config}/helix/languages.toml";    
+  };
+
   programs.mpv.enable = true;
+
+  programs.nushell.enable = true;
 
   programs.ncmpcpp.enable = true;
 
