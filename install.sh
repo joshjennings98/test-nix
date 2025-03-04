@@ -2,6 +2,32 @@
 
 set -e
 
+no_lock=false
+ref=""
+
+# Parse args
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-lock)
+      no_lock=true
+      shift
+      ;;
+    --ref)
+      if [ -n "$2" ]; then
+        ref="$2"
+        shift 2
+      else
+        echo "Error: --ref requires a value"
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 # List disks and prompt for which one to use
 lsblk -o NAME,SIZE,PATH
 read -p "Device path to partition (e.g. '/dev/sda'): " DEVICE
@@ -94,15 +120,20 @@ sudo nixos-generate-config --no-filesystems --root /mnt
 rm -rf $HOME/nix-config
 mkdir $HOME/nix-config
 cd $HOME/nix-config
-if [ -z "$1" ]; then
+if [ -z "$ref" ]; then
   sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#Ganymede
 else
-  sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix/$1#Ganymede
+  sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix/$ref#Ganymede
 fi
 
 # Copy generated hardware-configuration.nix and disko.nix
 sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
 sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
+
+# Optionally delete flake.lock to get latest packages
+if [ "$no_lock" = true ]; then
+  sudo rm $HOME/nix-config/flake.lock
+fi
 
 # Hash user password to file
 sudo mkdir -p /mnt/persist/passwords
