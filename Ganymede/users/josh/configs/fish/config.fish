@@ -15,14 +15,12 @@ set -gx EDITOR hx
 if status is-interactive
     # up -> search command history
     bind \e\[A 'if not commandline --paging-mode ; fzf_select_history (commandline -b) ; else ; commandline --function up-line ; end'
-    # ctrl + p -> search all filenames in current directory (recursive)
-    bind \cp 'fzf_file_search (commandline -b)'
     # ctrl + e -> edit current command in $EDITOR
     bind \ce edit_command_buffer
+    # ctrl + p -> search all filenames in current directory (recursive)
+    bind \cp 'fzf_file_search (commandline -b)'
     # ctrl + s -> search for string (regex) in files in current directory (recursive)
     bind \cs 'search_files (commandline -b)'
-    # placeholder
-    bind \cf tmux-sessioniser
 end
 
 #############
@@ -41,9 +39,9 @@ end
 
 function fzf_file_search --description "Search for files in current directory (recusively) using fzf"
     if test (count $argv) = 0
-        set fzf_flags --reverse --preview 'echo -e "{+}\n" ; batcat --color=always {}' --preview-window 50%
+        set fzf_flags --reverse --preview 'echo -e "{+}\n" ; bat --color=always {}' --preview-window 50%
     else
-        set fzf_flags --reverse --query "$argv" --preview 'echo -e "{+}\n" ; batcat --color=always {}' --preview-window 50%
+        set fzf_flags --reverse --query "$argv" --preview 'echo -e "{+}\n" ; bat --color=always {}' --preview-window 50%
     end
 
     set files (find . -type f -not -path "*/\.git/*" 2>&1 | grep -v "Permission denied" | fzf $fzf_flags | string split0)
@@ -62,7 +60,7 @@ function search_files --description "Search for a string (regex) in the files in
                 --reverse \
                 --phony -q "$argv" \
                 --delimiter : \
-                --preview 'batcat --color=always {1} --highlight-line {2} --line-range {2}:' \
+                --preview 'bat --color=always {1} --highlight-line {2} --line-range {2}:' \
                 --bind "change:reload:$RG_PREFIX {q} || true" \
                 --preview-window="up:60%"
     )
@@ -162,18 +160,18 @@ set -g __fish_git_prompt_color_untrackedfiles blue
 
 # set the prompt
 function fish_prompt
- set last_status $status
+    set last_status $status
 
- printf '%s' (echo $USER@)
- printf '%s ' (hostname)
- #printf '[%s] ' (kubectl config current-context)
- printf '%s' (__fish_git_prompt) | sed -e 's/ //' -e 's/$/ /' -e 's/(/[/' -e 's/)/]/'
+    printf '%s' (echo $USER@)
+    printf '%s ' (hostname)
+    #printf '[%s] ' (kubectl config current-context)
+    printf '%s' (__fish_git_prompt) | sed -e 's/ //' -e 's/$/ /' -e 's/(/[/' -e 's/)/]/'
 
- set_color $fish_color_cwd
- printf '%s\n' (prompt_pwd)
- set_color normal
+    set_color $fish_color_cwd
+    printf '%s\n' (prompt_pwd)
+    set_color normal
 
- set_color cyan
- echo -n "➤  "
- set_color normal
+    set_color cyan
+    echo -n "➤  "
+    set_color normal
 end

@@ -3,9 +3,8 @@
   programs.firefox = {
     enable = true;
     profiles.josh = {
-      bookmarks = { };
       # https://discourse.nixos.org/t/firefox-extensions-with-home-manager/34108
-      extensions = with inputs.firefox-addons.packages.${pkgs.system}; [
+      extensions.packages = with inputs.firefox-addons.packages.${pkgs.system}; [
         darkreader
         ublock-origin
         facebook-container
@@ -14,7 +13,29 @@
         reddit-enhancement-suite
         tridactyl
       ];
-      bookmarks = { };
+      bookmarks = [
+        {
+          name = "Nix";
+          toolbar = true;
+          bookmarks = [
+            {
+              name = "Package Search";
+              tags = [ "nixos" "nix" ];
+              url = "https://search.nixos.org/packages?channel=unstable";
+            }
+            {
+              name = "Function Reference";
+              tags = [ "nixos" "nix" ];
+              url = "https://ryantm.github.io/nixpkgs/";
+            }
+            {
+              name = "Home Manager";
+              tags = [ "nixos" "nix" ];
+              url = "https://nix-community.github.io/home-manager/options.xhtml";
+            }
+          ];
+        }
+      ];
       settings = {
         "browser.disableResetPrompt" = true;
         "browser.download.panel.shown" = true;

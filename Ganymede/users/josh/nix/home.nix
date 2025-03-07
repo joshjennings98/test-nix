@@ -63,10 +63,9 @@ in
   programs.home-manager.enable = true;
 
   home.packages = with pkgs; [
-    babashka
+    bat
     black
     cargo
-    clojure-lsp
     cookiecutter
     discord
     dockerfile-language-server-nodejs
@@ -84,19 +83,17 @@ in
     jq
     keepassxc
     lxappearance-gtk2
-    mockgen
     nil
-    nodejs_22
     nodePackages.bash-language-server
     obsidian
-    pagefind
+    pagefind # TODO: move to dev flake in website
     pyright
     pythonScripts.workspaceNames
-    raylib
     ripgrep
+    rustc
+    rustlings
     spotify
     statusbar
-    tinygo
     tree
     typst
     unzip
@@ -104,7 +101,6 @@ in
     xfce.thunar
     yaml-language-server
     yt-dlp
-    zig
     zip
   ];
 
@@ -115,6 +111,11 @@ in
 
   programs.fzf.enable = true;
 
+  programs.gh = {
+    enable = true;
+    gitCredentialHelper.enable = true;
+  };
+
   programs.git = {
     enable = true;
     userName = "Josh";
@@ -123,9 +124,11 @@ in
     difftastic.enable = true;
   };
 
-  programs.gh = {
+  programs.helix = {
     enable = true;
-    gitCredentialHelper.enable = true;
+    defaultEditor = true;
+    settings = lib.importTOML "${config}/helix/config.toml";    
+    languages = lib.importTOML "${config}/helix/languages.toml";    
   };
 
   programs.kitty = {
@@ -137,22 +140,26 @@ in
     extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
   };
 
-  programs.helix = {
-    enable = true;
-    defaultEditor = true;
-    settings = lib.importTOML "${config}/helix/config.toml";    
-    languages = lib.importTOML "${config}/helix/languages.toml";    
-  };
-
   programs.mpv.enable = true;
-
-  programs.nushell.enable = true;
 
   programs.ncmpcpp.enable = true;
 
-  programs.tmux.enable = true;
+  programs.sioyek = {
+    enable = true;
+    config = {
+      "custom_color_contrast" = "0.3";
+      "custom_color_mode_empty_background_color" = "#1d2021";
+      "page_separator_color" = "#1d2021";
+      "page_separator_width" = "10";
+      "custom_background_color" = "#282828";
+      "custom_text_color" = "#fbf1c7";
+      "search_highlight_color" = "#7ec16e";
+      "status_bar_color" = "#427b58";
+      "status_bar_text_color" = "#fbf1c7";
+    };
+  };
 
-  programs.zathura.enable = true;
+  programs.tmux.enable = true;
 
   services.mpd = {
     enable = true;
@@ -175,5 +182,5 @@ in
 
   systemd.user.startServices = "sd-switch"; # Nicely reload system units when changing configs
 
-  home.stateVersion = "23.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "24.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }
