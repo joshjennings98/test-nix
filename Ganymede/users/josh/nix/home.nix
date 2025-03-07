@@ -52,6 +52,7 @@ in
       ".local/share/vulkan"
       ".cache/mesa_shader_cache"
       ".config/spotify"
+      ".config/gh"
     ];
     files = [
       ".screenrc"
