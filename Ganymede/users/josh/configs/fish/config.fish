@@ -158,6 +158,9 @@ set -g __fish_git_prompt_color_stagedstate green
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_untrackedfiles blue
 
+# make sure that the command colour is the one I like
+set -U fish_color_command 458588
+
 # set the prompt
 function fish_prompt
     set last_status $status
