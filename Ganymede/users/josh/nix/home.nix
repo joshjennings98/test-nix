@@ -64,6 +64,7 @@ in
   programs.home-manager.enable = true;
 
   home.packages = with pkgs; [
+    anki-bin
     bat
     black
     cargo
