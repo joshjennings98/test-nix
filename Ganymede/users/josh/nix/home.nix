@@ -20,6 +20,8 @@ in
 
     ./firefox.nix
     ./i3.nix
+
+    ./nvim
   ];
 
   home = {

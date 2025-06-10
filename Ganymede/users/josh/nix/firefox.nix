@@ -8,7 +8,6 @@
         darkreader
         ublock-origin
         facebook-container
-        gruvbox-dark-theme
         old-reddit-redirect
         reddit-enhancement-suite
         tridactyl
