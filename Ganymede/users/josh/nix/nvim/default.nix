@@ -158,7 +158,6 @@
         plugin = mini-nvim; # Ridiculously complete family of plugins
         type = "lua";
         config = ''
-          require('mini.align').setup()      -- aligning
           require('mini.bracketed').setup()  -- unimpaired bindings with TS
           require('mini.comment').setup()    -- TS-wise comments
           require('mini.pairs').setup()      -- pair brackets
@@ -229,10 +228,7 @@
       }
       targets-vim     # Classic text-objects
       vim-eunuch      # powerful buffer-level file options
-      vim-ragtag      # print/execute bindings for template files
-      vim-speeddating # incrementing dates and times
       vim-fugitive    # :Git actions
-      vim-rhubarb     # github plugins for fugitive
       # LSP and Completion
       # =======================================================================
       cmp-nvim-lsp
