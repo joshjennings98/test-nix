@@ -3,8 +3,6 @@ let
   config = ./.;
   overlays = "${config}/overlays";
   homedir = "/home/josjen01";
-
-  parseGhosttyConfig = (import ./helpers/parseGhostty.nix { inherit lib; });
 in
 {
   nixpkgs = {
@@ -18,6 +16,10 @@ in
     ];
     config.allowUnfree = true;
   };
+
+  imports = [
+    ./nvim
+  ];
 
   home.username = "josjen01";
   home.homeDirectory = "${homedir}";
@@ -93,17 +95,6 @@ in
     gitCredentialHelper.enable = true; # should work for private go modules tool
   };
 
-  programs.ghostty = {
-    enable = true;
-    enableFishIntegration = true;
-    # Ghostty needs OpenGL to work properly so make the changes to how the binary is executed https://pmiddend.github.io/posts/nixgl-on-ubuntu/
-    package = pkgs.writeShellScriptBin "ghostty-nixgl" ''
-      #!/bin/sh
-      ${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel ${pkgs.ghostty}/bin/ghostty "$@"
-    '';
-    settings = parseGhosttyConfig "${config}/ghostty/config";
-  };
-
   programs.helix = {
     enable = true;
     defaultEditor = true;
@@ -111,20 +102,36 @@ in
     languages = lib.importTOML "${config}/helix/languages.toml";    
   };
 
-  programs.nushell.enable = true;
+  programs.kitty = {
+    enable = true;
+    shellIntegration.enableFishIntegration = true;
+    font = {
+      name = "Iosevka";
+      size = 12;
+    };
+    # Kitty needs OpenGL to work properly so make the changes to how the binary is executed https://pmiddend.github.io/posts/nixgl-on-ubuntu/
+    package = pkgs.writeShellScriptBin "kitty" ''
+      #!/bin/sh
+      ${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel ${pkgs.kitty}/bin/kitty "$@"
+    '';
+    settings = {
+      shell = "${pkgs.fish}/bin/fish";
+    };
+    extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
+  };
 
-  programs.zathura.enable = true;
+  programs.sioyek.enable = true;
 
   xdg = {
     enable = true;
     mime.enable = true;
     systemDirs.data = [ "${homedir}/.nix-profile/share/applications" ];
     desktopEntries = {
-      ghostty = {
-        name = "Ghostty";
+      kitty = {
+        name = "Kitty";
         genericName = "Terminal";
-        exec = "ghostty-nixgl";
-        icon = "${pkgs.ghostty}/share/icons/hicolor/256x256/apps/com.mitchellh.ghostty.png";
+        exec = "kitty";
+        icon = "${pkgs.kitty}/share/icons/hicolor/256x256/apps/kitty.png";
         terminal = false;
         categories = [ "Utility" ];
       };
