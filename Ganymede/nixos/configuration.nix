@@ -78,6 +78,7 @@
       startx.enable = true; # don't install xorg or startx manually, this will do all configuration etc.
       # setupCommands = "${pkgs.xorg.xrandr}/bin/xrandr --output DP-0 --mode 3440x1440 --rate 164.90"; # todo: isn't working for some reason
     };
+    xkb.options = "ctrl:nocaps"; # map capslock to ctrl
   };
   services.displayManager = {
     defaultSession = "none+i3";
@@ -142,6 +143,12 @@
     networkmanager.enable = true;
   };
 
+  # PAM services for i3lock etc. defdault to disabled. Since I am managing i3 through home manager I need to set this.
+  # Otherwise I would just have to set programs.i3lock.enable = true; https://github.com/NixOS/nixpkgs/pull/399051/files#diff-aef862f6fd2c25092a3f17f974d8757285bf7baff6b80822cd142b7de1
+  security.pam.services = {
+    i3lock.enable = true;
+  };
+
   # Misc settings
   time.timeZone = "London/Europe";
   i18n = {
@@ -150,5 +157,5 @@
   zramSwap.enable = true; # recommended for star citizen if you have less than 40GB of RAM https://github.com/fufexan/nix-gaming/tree/master/pkgs/star-citizen
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
-  system.stateVersion = "24.11";
+  system.stateVersion = "25.05";
 }
