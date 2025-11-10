@@ -24,7 +24,7 @@ vim.keymap.set("v", "<", "<gv")
 vim.keymap.set("n", "J", "mzJ`z") 
 
 -- ge to go to end (like helix)
-vim.keymap.set("n", "ge", ":$", { desc = "Go to end" }) 
+vim.keymap.set("n", "ge", ":$<cr>", { desc = "Go to end" }) 
 
 -- keep match in middle on search
 vim.keymap.set("n", "n", "nzzzv")
