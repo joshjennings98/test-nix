@@ -1,6 +1,5 @@
 vim.g.mapleader = " "             -- change leader key to space
 vim.wo.number = true              -- show line numbers
-vim.wo.relativenumber = true      -- show relative line numbers
 vim.wo.colorcolumn = "120"        -- line at 120 characters
 vim.opt.signcolumn = "yes"        -- always show signcolumn
 vim.opt.tabstop = 4               -- set tabwidth to 4
@@ -50,20 +49,6 @@ end, 0)
 -- use rg
 vim.o.grepprg = [[rg --glob "!.git" --no-heading --vimgrep --follow $*]]
 vim.opt.grepformat = vim.opt.grepformat ^ { "%f:%l:%c:%m" }
-
-vim.fn.sign_define("DiagnosticSignError", {text = "E", hl = "DiagnosticSignError", texthl = "DiagnosticSignError", culhl = "DiagnosticSignErrorLine"})
-vim.fn.sign_define("DiagnosticSignWarn", {text = "W", hl = "DiagnosticSignWarn", texthl = "DiagnosticSignWarn", culhl = "DiagnosticSignWarnLine"})
-vim.fn.sign_define("DiagnosticSignInfo", {text = "I", hl = "DiagnosticSignInfo", texthl = "DiagnosticSignInfo", culhl = "DiagnosticSignInfoLine"})
-vim.fn.sign_define("DiagnosticSignHint", {text = "H", hl = "DiagnosticSignHint", texthl = "DiagnosticSignHint", culhl = "DiagnosticSignHintLine"})
-
--- make <Tab> work for snippets
-vim.keymap.set({ 'i', 's' }, '<Tab>', function()
-   if vim.snippet.active({ direction = 1 }) then
-     return '<cmd>lua vim.snippet.jump(1)<cr>'
-   else
-     return '<Tab>'
-   end
-end, { expr = true })
 
 -- setup directories for undo and swaps etc.
 vim.opt.backupdir = { vim.fn.expand("~/.config/nvim/backups"), "." }

@@ -24,11 +24,15 @@ vim.keymap.set("v", "<", "<gv")
 vim.keymap.set("n", "J", "mzJ`z") 
 
 -- ge to go to end (like helix)
-vim.keymap.set("n", "ge", ":$") 
+vim.keymap.set("n", "ge", ":$", { desc = "Go to end" }) 
 
 -- keep match in middle on search
 vim.keymap.set("n", "n", "nzzzv")
 vim.keymap.set("n", "N", "Nzzzv")
+
+-- shift tab to inverse tab
+vim.keymap.set('i', '<S-Tab>', '<C-d>', { noremap = true })
+vim.keymap.set('v', '<S-Tab>', '<gv', { noremap = true })
 
 -- quickly split windows etc. 
 vim.keymap.set("n", "<space>ws", ":wincmd s<cr>", { silent = true, desc = "Split window horizontally" })

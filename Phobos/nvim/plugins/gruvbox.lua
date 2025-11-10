@@ -1,10 +1,4 @@
 -- gruvbox colour scheme
-require("gruvbox").setup({
-  overrides = {
-    GitSignsAdd    = { link = "GruvboxGreenSign" },
-    GitSignsChange = { link = "GruvboxAquaSign" },
-    GitSignsDelete = { link = "GruvboxRedSign" },
-  }
-})
+require("gruvbox").setup({})
 
 vim.cmd("colorscheme gruvbox")

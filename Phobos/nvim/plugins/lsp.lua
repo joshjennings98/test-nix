@@ -1,10 +1,15 @@
-local capabilities = require('cmp_nvim_lsp').default_capabilities()
-
 -- Use LspAttach autocommand to only map the following keys
 -- after the language server attaches to the current buffer
 vim.api.nvim_create_autocmd('LspAttach', {
   group = vim.api.nvim_create_augroup('UserLspConfig', {}),
   callback = function(ev)
+    -- Remove unwanted default mappings
+    pcall(vim.keymap.del, "n", "gra")
+    pcall(vim.keymap.del, "n", "gri")
+    pcall(vim.keymap.del, "n", "grn")
+    pcall(vim.keymap.del, "n", "grr")
+    pcall(vim.keymap.del, "n", "grt")
+
     -- Enable completion triggered by <c-x><c-o>
     vim.bo[ev.buf].omnifunc = 'v:lua.vim.lsp.omnifunc'
 
@@ -27,24 +32,36 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
-local lspconfig = require('lspconfig')
-
--- Setup gopls with your custom settings
-lspconfig.gopls.setup {
-    capabilities = capabilities,
-    settings = {
-        gopls = {
-            hints = {
-                assignVariableTypes = true,
-                compositeLiteralFields = true,
-                compositeLiteralTypes = true,
-                constantValues = true,
-                functionTypeParameters = true,
-                parameterNames = true,
-                rangeVariableTypes = true,
-            },
-        },
+vim.lsp.config("gopls", {
+  settings = {
+    gopls = {
+      hints = {
+        assignVariableTypes = true,
+        compositeLiteralFields = true,
+        compositeLiteralTypes = true,
+        constantValues = true,
+        functionTypeParameters = true,
+        parameterNames = true,
+        rangeVariableTypes = true,
+      },
     },
-}
-lspconfig.nil_ls.setup {}
+  },
+})
+vim.lsp.config("nil_ls", {})
+vim.lsp.config("golangci_lint_ls", {
+  init_options = {
+	  command = { "golangci-lint", "run", "--output.json.path", "stdout", "--show-stats=false", "--issues-exit-code=1" };
+	};
+})
 
+vim.lsp.enable('gopls')
+vim.lsp.enable('golangci_lint_ls')
+vim.lsp.enable('nil_ls')
+
+vim.diagnostic.config({
+  virtual_text = true,  
+  signs = true,         
+  underline = true,    
+  update_in_insert = false,
+  severity_sort = true,
+})

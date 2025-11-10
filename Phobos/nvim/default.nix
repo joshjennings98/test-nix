@@ -12,7 +12,6 @@
     enable = true;
     extraLuaConfig = lib.fileContents ./init.lua;
     plugins = with pkgs.vimPlugins; [
-      # UI and Themes
       {
         plugin = gruvbox-nvim;
         type = "lua";
@@ -24,21 +23,10 @@
         config = lib.fileContents ./plugins/oil.lua;
       }
       {
-        plugin = eyeliner-nvim;
-        type = "lua";
-        config = lib.fileContents ./plugins/eyeliner.lua;
-      }
-      {
-        plugin = gitsigns-nvim;
-        type = "lua";
-        config = lib.fileContents ./plugins/gitsigns.lua;
-      }
-      {
         plugin = telescope-nvim;
         type = "lua";
         config = lib.fileContents ./plugins/telescope.lua;
       }
-      # Treesitter
       {
         plugin = nvim-treesitter.withAllGrammars;
         type = "lua";
@@ -49,16 +37,17 @@
         type = "lua";
         config = lib.fileContents ./plugins/treesitter-text-objects.lua;
       }
-      # Misc
+      targets-vim
       {
         plugin = mini-nvim;
         type = "lua";
         config = lib.fileContents ./plugins/mini.lua;
       }
-      nvim-autopairs
-      targets-vim
-      vim-eunuch     
-      vim-fugitive
+      {
+        plugin = multicursor-nvim;
+        type = "lua";
+        config = lib.fileContents ./plugins/multicursor.lua;
+      }
       {
         plugin = undotree;
         type = "lua";
@@ -84,16 +73,15 @@
         type = "lua";
         config = lib.fileContents ./plugins/yanky.lua;
       }
-      # LSP and Completion
-      cmp-nvim-lsp
-      cmp-buffer
-      cmp-path
-      cmp-nvim-lsp-signature-help
+      {
+        plugin = which-key-nvim;
+        type = "lua";
+        config = lib.fileContents ./plugins/which-key.lua;
+      }
       friendly-snippets
       luasnip
-      cmp_luasnip
       {
-        plugin = nvim-cmp;
+        plugin = blink-cmp;
         type = "lua";
         config = lib.fileContents ./plugins/cmp.lua;
       }
@@ -102,10 +90,8 @@
         type = "lua";
         config = lib.fileContents ./plugins/lsp.lua;
       }
-      # DAP
       nvim-dap-go
-      nvim-dap-ui
-      nvim-dap-virtual-text
+      nvim-dap-view
       {
         plugin = nvim-dap;
         type = "lua";
@@ -114,4 +100,3 @@
     ];
   };
 }
-
