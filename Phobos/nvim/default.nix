@@ -12,11 +12,7 @@
     enable = true;
     extraLuaConfig = lib.fileContents ./init.lua;
     plugins = with pkgs.vimPlugins; [
-      {
-        plugin = gruvbox-nvim;
-        type = "lua";
-        config = lib.fileContents ./plugins/gruvbox.lua;
-      }
+      gruvbox-nvim
       {
         plugin = oil-nvim;
         type = "lua";
