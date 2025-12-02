@@ -1,8 +1,0 @@
-font-family         = Iosevka
-font-size           = 13
-font-feature        = -calt
-font-feature        = -liga
-font-feature        = -dlig
-focus-follows-mouse = true
-theme               = GruvboxDark
-command             = fish

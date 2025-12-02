@@ -18,9 +18,9 @@ Install from the flake:
 
 ```
 export NIX_CONFIG="experimental-features = nix-command flakes"
-mkdir nix-cfg
-nix flake init -t github:joshjennings98/test-nix#Phobos
-nix run home-manager switch --flake .#josjen01
+mkdir .config/home-manager
+nix flake init -t github:joshjennings98/test-nix/test#Phobos
+nix run home-manager/master -- switch --flake .#josjen01
 ```
 
 ### If that doesn't work
@@ -31,7 +31,7 @@ Install home manager:
 nix run home-manager/master -- init --switch
 ```
 
-Copy the files from the above flake into `.config/home-manager` and run:
+Copy the files from the above flake (you might have to put them in a dfferent directory) into `.config/home-manager` and run:
 
 ```
 home-manager switch --flake .config/home-manager/
@@ -39,10 +39,10 @@ home-manager switch --flake .config/home-manager/
 
 ### Updating home manager config
 
-Make any changes in `nix-cfg/home.nix` and run (adjust path to flake directory as necessary):
+Make any changes in `<config_dir>/home.nix` and run (adjust path to flake directory as necessary):
 
 ```
-home-manager switch --flake ./nix-cfg#josjen01
+home-manager switch --flake .#josjen01
 ```
 
 ## Manual Stuff
@@ -101,3 +101,7 @@ I can't seem to easily set this so you must go into the `gnome-settings` and set
 ### Backing up history etc.
 
 It is a good idea to backup history and any passwords added to the keepass database in case access is lost to the laptop.
+
+### Git Repos
+
+Git repos can be automatically downloaded by running the init script in `~/Git/`.

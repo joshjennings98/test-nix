@@ -11,6 +11,9 @@ functionTypeParameters = true
 parameterNames = true
 rangeVariableTypes = true
 
+[language-server.golangci-lint-lsp.config] # TODO: remove once new helix is released
+command = ["golangci-lint", "run", "--output.json.path=stdout", "--show-stats=false", "--issues-exit-code=1"]
+
 [[language]]
 name = "python"
 rulers = [80, 120]

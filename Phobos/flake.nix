@@ -9,6 +9,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    firefox-addons = {
+      url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Kitty needs OpenGL to work properly https://pmiddend.github.io/posts/nixgl-on-ubuntu/
     nixgl.url = "github:nix-community/nixGL";
   };
@@ -18,7 +23,7 @@
     nixpkgs, 
     home-manager, 
     ... 
-  }: let
+  } @ inputs: let
     pkgs = import nixpkgs {
       system = "x86_64-linux";
       overlays = [ nixgl.overlay ];
@@ -28,6 +33,7 @@
       josjen01 = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         modules = [ ./home.nix ];
+        extraSpecialArgs = { inherit inputs; };
       };
     };
   };

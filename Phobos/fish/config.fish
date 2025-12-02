@@ -15,12 +15,8 @@ set -gx EDITOR hx
 if status is-interactive
     # up -> search command history
     bind \e\[A 'if not commandline --paging-mode ; fzf_select_history (commandline -b) ; else ; commandline --function up-line ; end'
-    # ctrl + p -> search all filenames in current directory (recursive)
-    bind \cp 'fzf_file_search (commandline -b)'
     # ctrl + e -> edit current command in $EDITOR
     bind \ce edit_command_buffer
-    # ctrl + s -> search for string (regex) in files in current directory (recursive)
-    bind \cs 'search_files (commandline -b)'
 end
 
 # FUNCTIONS
@@ -32,36 +28,6 @@ function fzf_select_history --description "Search command history using fzf"
         and commandline -- $result
     end
     commandline -f repaint
-end
-
-function fzf_file_search --description "Search for files in current directory (recusively) using fzf"
-    if test (count $argv) = 0
-        set fzf_flags --reverse --preview 'echo -e "{+}\n" ; batcat --color=always {}' --preview-window 50%
-    else
-        set fzf_flags --reverse --query "$argv" --preview 'echo -e "{+}\n" ; batcat --color=always {}' --preview-window 50%
-    end
-
-    set files (find . -type f -not -path "*/\.git/*" 2>&1 | grep -v "Permission denied" | fzf $fzf_flags | string split0)
-
-    if [ $files ]
-        $EDITOR (echo $files | sed -e '/^$/d' -e 's/\n/ /g')
-    end
-end
-
-function search_files --description "Search for a string (regex) in the files in the current directory (recursively) using fzf and ripgrep"
-    set -x RG_PREFIX rg --column --line-number --no-heading --smart-case
-    set -l file
-    set file (
-        FZF_DEFAULT_COMMAND="$RG_PREFIX '$argv'" \
-            fzf --sort \
-                --reverse \
-                --phony -q "$argv" \
-                --delimiter : \
-                --preview 'bat --color=always {1} --highlight-line {2} --line-range {2}:' \
-                --bind "change:reload:$RG_PREFIX {q} || true" \
-                --preview-window="up:60%"
-    )
-    and $EDITOR (echo $file | awk -F: '{ printf "%s:%s", $1,$2 }')
 end
 
 function edit_command_buffer --description "Open the current command buffer in a text editor ($EDITOR) to make modifying long/multiline commands easier"
@@ -82,6 +48,50 @@ function edit_command_buffer --description "Open the current command buffer in a
     commandline -r (cat $f)
     commandline -C $p
     command rm $f
+end
+
+function yq2 --description "Interactive jq/yq REPL that will repaint the commandline with the chosen query using 'yq'. Supports -r to repaint with 'yq -r'."
+    if [ (count $argv) -eq 0 ]
+        or begin
+            [ (count $argv) -eq 1 ]
+            and [ "$argv[1]" = -r ]
+        end
+        set input (mktemp)
+        function __cleanup_input --on-event fish_exit
+            rm -f $input
+        end
+        yq -o=json >$input
+    else if [ (count $argv) -gt 1 ]
+        and [ "$argv[1]" = -r ]
+        echo "this command must be used as a pipe"
+        return 1
+    else
+        echo "this command must be used as a pipe"
+        return 1
+    end
+
+    set paths (yq -o=json '.' $input | \
+        jq -r '
+            [ path(..)
+              | map(if type=="number" then "[]" else tostring end)
+              | join(".")
+              | split(".[]")
+              | join("[]")
+            ]
+            | unique
+            | map("." + .)
+            | .[]
+        ' | string collect -N) # collect array with newlines https://fishshell.com/docs/current/cmds/string.html#collect-subcommand
+
+    set -l query (echo $paths | fzf --preview-window='up:60%' \
+                                --query . \
+                                --preview "jq --color-output -r {q} $input" \
+                                --bind "tab:replace-query" \
+                                --bind "enter:print-query+abort") # only print query --print-query would print both
+
+    set -l cmd (status current-commandline)
+    set -l new_cmd (string replace -r '[j|y]q2(\s+[^\|]+)?' "yq -o=json | jq '$query'\$1" -- $cmd)
+    commandline -r $new_cmd
 end
 
 function mkcd --description "Make a directory (if it doesn't exist) and cd into it"
@@ -111,37 +121,23 @@ function Git --description "Clone (if necessary) project into ~/Git"
     end
 end
 
-function envsource --description "Source standard env files using fish"
-    for line in (cat $argv | grep -v '^#' | grep -v '^\s*$')
-        set -l item (string split -m 1 '=' $line)
-        set -gx $item[1] (string trim --chars=\'\" $item[2])
-        echo "Exported key $item[1]"
+function password --description "Copy password (or set an environment variable if 'envvar' in Tags) using keepassxc"
+    set -l db $argv[1]
+    if test (count $argv) -lt 1
+        set db (find ~ -type f -not -path "*/\.git/*" -name "*.kdbx" 2>&1 | grep -v "Permission denied" | fzf $fzf_flags)
     end
-end
-
-function password --description "Type the password from a specific keepassxc entry"
-    if test (count $argv) -lt 2
-        keepassxc cli ls $argv[1] | grep -v env_secrets
+    read -s -P "Password for $db: " -l password
+    set -l entries (echo $password | keepassxc-cli ls -q $db | string collect -N)
+    set -l entry (echo $entries | fzf)
+    set -l tags (echo $password | keepassxc-cli show -q $db $entry -a Tags)
+    if string match -q "*envvar*" $tags
+        set -gx $entry (echo $password | keepassxc-cli show -q $db $entry -a Password)
     else
-        set -l info (keepassxc-cli show -s $argv[1] $argv[2]) || return 1
-        read -P "When ready press enter and click a window to type $argv[2] password for user: '(echo $info | grep User | awk '{ print $2 }')' " -l _
-        set -l win_id (xdotool selectwindow)
-        xdotool windowactivate --sync "$win_id"
-        xdotool type (echo $info | grep Password | awk '{ print $2 }')
+        echo "Password copied to clipboard for 10 seconds"
+        echo $password | keepassxc-cli clip -q $db $entry
+        echo "Clipboard cleared"
     end
-end
-
-function envsecrets --description "Export env files stored in env_secrets keepassxc entry"
-    if test (count $argv) -lt 2
-        keepassxc cli show $argv[1] env_secrets --show-attachments | awk '/Attachments/{flag=1; next} flag'
-    else
-        set -l vars (keepassxc-cli attachment-export $argv[1] env_secrets $argv[2] --stdout | grep -v '^#') || return 1
-        echo "$vars" | while read -l line
-            set -l item (string split -m 1 '=' $line)
-            set -gx $item[1] (string trim --chars=\'\" $item[2])
-            echo "Exported key $item[1]"
-        end
-    end
+    set -e password
 end
 
 # ABBREVIATIONS
@@ -153,8 +149,11 @@ abbr --add gcm git commit -m \"\$\(cat \$\(find \"\$\(git rev-parse --show-tople
 alias la='ls -aF' # list all files (including hidden)
 alias ll='ls -lhFBA' # list all files (including hidden) in a human readable way
 alias lr='ls -R' # list EVERYTHING (recursive ls)
+
 alias kctx='kubectl config use-context (kubectl config get-contexts -o name | fzf)' # switch kubernetes context with fzf
 alias ksso='aws sso login --sso-session arm' # log into aws cluster
+
+alias jq2=yq2
 
 # PROMPT
 set fish_greeting # don't show greeting
@@ -204,4 +203,3 @@ fish_add_path /usr/local/go/bin
 
 # ALWAYS RUN
 go env -w GOPRIVATE=github.com/Arm-Debug
-kubectl completion fish | source
