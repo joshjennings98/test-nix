@@ -1,5 +1,5 @@
 { pkgs ? import <nixpkgs> { } }:
-with pkgs.python3Packages;
+with pkgs.python311Packages;
 
 buildPythonPackage rec {
   pname = "continuous-delivery-scripts";
@@ -9,5 +9,6 @@ buildPythonPackage rec {
     sha256 = "sha256-fYCeyX4w6HhEngSyUVzuHEYCwtsM5VHDVwjYk64tEZE=";
   };
   doCheck = false;
+  format = "setuptools";
   propagatedBuildInputs = [ gitpython packaging python-dotenv toml wcmatch ];
 }
