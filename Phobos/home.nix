@@ -1,7 +1,7 @@
-{ lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
-  config = ./.;
-  overlays = "${config}/overlays";
+  cfg = ./.;
+  overlays = "${cfg}/overlays";
   homedir = "/home/josjen01";
 in
 {
@@ -10,31 +10,36 @@ in
       (final: pre: { 
         continuous-delivery-scripts = pre.callPackage ("${overlays}/continuous-delivery-scripts.nix") { inherit pkgs; }; 
       })
-      (final: pre: { 
-        detect-secrets-1-0-3 = pre.callPackage ("${overlays}/detect-secrets-1-0-3.nix") { inherit pkgs; };
+      (final: pre: {
+        file-roller = config.lib.nixGL.wrap pre.file-roller;
       })
     ];
     config.allowUnfree = true;
   };
 
   imports = [
-    ./nvim
+    ./firefox.nix
   ];
 
   home.username = "josjen01";
   home.homeDirectory = "${homedir}";
 
+  home.shell.enableFishIntegration = true;
+
+  home.sessionVariables = {
+    GIO_EXTRA_MODULES = "${pkgs.gvfs}/lib/gio/modules";
+  };
+
   home.packages = with pkgs; [
     awscli2
     bat
-    black
     continuous-delivery-scripts
-    dbeaver-bin
-    detect-secrets-1-0-3
+    detect-secrets
     delve
-    dockerfile-language-server-nodejs
-    emacs
+    dockerfile-language-server
     fd
+    file-roller
+    gnome.gvfs
     go
     golangci-lint
     golangci-lint-langserver
@@ -45,61 +50,65 @@ in
     keepassxc
     kubectl
     kubernetes-helm
-    mockgen
+    networkmanager
     nil
-    nixgl.nixGLIntel
-    nsjail
     nodePackages.bash-language-server
     openapi-generator-cli
-    python3
-    pipenv # for ease of use with existing projects
-    pyright
     ripgrep
     sops
     terraform
     tflint
-    tilt
     tree
-    typst
+    xclip
+    xdotool
     xfce.thunar
+    xfce.thunar-archive-plugin
     yaml-language-server
     yq-go
+    wmctrl
   ];
 
-  home.file.".aws/config".source = "${config}/aws/config"; 
-  home.file.".aws/credentials".source = "${config}/aws/credentials"; 
+  home.file.".aws/config".source = "${cfg}/aws/config"; 
+  home.file.".aws/credentials".source = "${cfg}/aws/credentials"; 
+  home.file."Git/init.sh".text = ''
+    #!/usr/bin/env bash
+    gh api "/orgs/Arm-Debug/repos?per_page=100" --paginate \
+      | jq -r '.[].name' \
+      | while read repo; do
+          if gh api -H "Accept: application/vnd.github.v3.raw" \
+             "/repos/Arm-Debug/$repo/contents/.github/CODEOWNERS" 2>/dev/null \
+             | grep -q "@Arm-Debug/services"; then
+               git clone "git@github.com:Arm-Debug/$repo.git"
+          fi
+        done
+  ''; 
 
   programs.fish = {
     enable = true;
-    interactiveShellInit = builtins.readFile "${config}/fish/config.fish";
+    interactiveShellInit = builtins.readFile "${cfg}/fish/config.fish";
+    shellInitLast = "source ~/fish/completions/kubectl";
   };
   
-  home.file."fish/completions/kubectl".source = "${config}/fish/completions/kubectl"; 
+  home.file."fish/completions/kubectl".source = "${cfg}/fish/completions/kubectl"; 
 
-  programs.firefox.enable = true;
+  programs.difftastic.enable = true;
   
   programs.fzf.enable = true;
 
   programs.git = {
     enable = true;
-    userName = "joshjennings98";
-    userEmail = "josh.jennings@arm.com";
-    extraConfig = {
+    settings = {
       push.autoSetupRemote = true;
+      user = {
+        name = "joshjennings98";
+        email = "josh.jennings@arm.com";
+      };
     };
-    difftastic.enable = true;
   };
 
   programs.gh = {
     enable = true;
     gitCredentialHelper.enable = true; # should work for private go modules tool
-  };
-
-  programs.helix = {
-    enable = true;
-    defaultEditor = true;
-    settings = lib.importTOML "${config}/helix/config.toml";    
-    languages = lib.importTOML "${config}/helix/languages.toml";    
   };
 
   programs.kitty = {
@@ -109,18 +118,24 @@ in
       name = "Iosevka";
       size = 12;
     };
-    # Kitty needs OpenGL to work properly so make the changes to how the binary is executed https://pmiddend.github.io/posts/nixgl-on-ubuntu/
-    package = pkgs.writeShellScriptBin "kitty" ''
-      #!/bin/sh
-      ${pkgs.nixgl.nixGLIntel}/bin/nixGLIntel ${pkgs.kitty}/bin/kitty "$@"
-    '';
+    package = config.lib.nixGL.wrap pkgs.kitty;
     settings = {
       shell = "${pkgs.fish}/bin/fish";
     };
-    extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
+    extraConfig = builtins.readFile "${cfg}/kitty/kitty.conf";
   };
 
-  programs.sioyek.enable = true;
+  programs.helix = {
+    enable = true;
+    defaultEditor = true;
+    settings = lib.importTOML "${cfg}/helix/config.toml";    
+    languages = lib.importTOML "${cfg}/helix/languages.toml";    
+  };
+
+  nixGL = {
+    packages = pkgs.nixgl;
+    vulkan.enable = true;
+  };
 
   xdg = {
     enable = true;
@@ -146,6 +161,13 @@ in
     };
   };
 
+  dconf = {
+    enable = true;
+    settings = {
+      "org/gnome/desktop/interface".show-battery-percentage = true;
+    };
+  };
+
   # This will need the equivalent of 'programs.dconf.enable = true;' on whatever system this is run on
   gtk = {
     enable = true;
@@ -165,5 +187,5 @@ in
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
-  home.stateVersion = "25.05"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "25.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }
