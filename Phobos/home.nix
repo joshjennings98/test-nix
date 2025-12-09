@@ -18,7 +18,7 @@ in
   };
 
   imports = [
-    ./firefox.nix
+    ./i3.nix
   ];
 
   home.username = "josjen01";
