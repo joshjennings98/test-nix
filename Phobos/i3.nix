@@ -62,7 +62,7 @@
         { command = "autorandr -c"; }
         { command = "feh --bg-fill ~/Pictures/Wallpaper/wallpaper.jpg"; }
         { command = "exec --no-startup-id systemctl --user start nm-applet.service"; }
-        { command = "i3-workspace-names-daemon"; }
+        { command = "i3-workspace-names-daemon"; } # TODO: make part of a service
       ];
       window = {
         border = 2;
