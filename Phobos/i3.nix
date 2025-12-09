@@ -109,29 +109,22 @@
   };
 
     xdg.configFile."i3blocks/config".text = ''
-    # Volume
     [volume]
     command=i3blocks-volume
     interval=1
-    # optional: use a font with these icons (e.g. Font Awesome)
-    # markup=pango
 
-    # Network
     [network]
     command=i3blocks-net
     interval=5
 
-    # CPU
     [cpu]
     command=i3blocks-cpu
     interval=2
 
-    # Memory
     [memory]
     command=i3blocks-mem
     interval=5
 
-    # Date / Time
     [time]
     command=date '+%Y-%m-%d %H:%M'
     interval=60
@@ -169,7 +162,7 @@
     executable = true;
     text = ''
       #!/usr/bin/env bash
-      if [ "$BLOCK_BUTTON" = "1" ]; then
+      if [ "$BLOCK_BUTTON" = "1" ]; then # left click open nmtui in kitty
         exec kitty -e nmtui
         exit
       fi
