@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 {
   nixpkgs = {
     overlays = [
@@ -108,120 +108,118 @@
     };
   };
 
-    xdg.configFile."i3blocks/config".text = ''
-    [volume]
-    command=i3blocks-volume
-    interval=1
+  programs.i3blocks = {
+    enable = true;
+    bars.config = {
+      volume = {
+        command = ''
+          #!/usr/bin/env sh
+          STEP=5
 
-    [network]
-    command=i3blocks-net
-    interval=5
+          case "$BLOCK_BUTTON" in
+            1) pamixer -t ;;          # left click: mute/unmute
+            4) pamixer -i "$STEP" ;;  # scroll up: volume up
+            5) pamixer -d "$STEP" ;;  # scroll down: volume down
+          esac
 
-    [cpu]
-    command=i3blocks-cpu
-    interval=2
+          vol=$(pamixer --get-volume 2>/dev/null || echo 0)
+          muted=$(pamixer --get-mute 2>/dev/null || echo false)
 
-    [memory]
-    command=i3blocks-mem
-    interval=5
+          if [ "$muted" = "true" ]; then
+            text="Mute"
+            color="#ff5555"
+          else
+            text="$vol%"
+            color=""
+          fi
+          
+          echo "$text"
+          echo "$color"
+        '';
+        interval = 1;
+      };
 
-    [time]
-    command=date '+%Y-%m-%d %H:%M'
-    interval=60
-  '';
+      network = lib.hm.dag.entryAfter [ "volume" ] {
+        command = ''
+          #!/usr/bin/env sh
+          if [ "$BLOCK_BUTTON" = "1" ]; then # left click opens nmtui in a terminal
+            for term in alacritty kitty gnome-terminal xterm; do
+              if command -v "$term" >/dev/null 2>&1; then
+                "$term" -e nmtui &
+                exit 0
+              fi
+            done
+          fi
 
-  home.file.".local/bin/i3blocks-volume" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      STEP=5
+          if ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; then
+            echo "UP"
+            echo "UP"
+            echo "#a3be8c"  # green
+          else
+            echo "DOWN"
+            echo "DOWN"
+            echo "#bf616a"  # red
+          fi
+        '';
+        interval = 5;
+      };
 
-      case "$BLOCK_BUTTON" in
-        1) pamixer -t ;;          # left click: mute/unmute
-        4) pamixer -i "$STEP" ;;  # scroll up: volume up
-        5) pamixer -d "$STEP" ;;  # scroll down: volume down
-      esac
+      cpu = lib.hm.dag.entryAfter [ "network" ] {
+        command = ''
+          #!/usr/bin/env sh
+          PREV="/tmp/.i3blocks_cpu_prev"
 
-      vol=$(pamixer --get-volume 2>/dev/null || echo 0)
-      muted=$(pamixer --get-mute 2>/dev/null || echo false)
+          set -- $(grep '^cpu ' /proc/stat)
 
-      if [ "$muted" = "true" ]; then
-        text="Mute"
-        color="#ff5555"
-      else
-        text="$vol%"
-        color=""
-      fi
+          user=$2 nice=$3 system=$4 idle=$5 iowait=$6 irq=$7 softirq=$8 steal=$9
+          total=$((user + nice + system + idle + iowait + irq + softirq + steal))
 
-      echo "$text"
-      echo "$color"
-    '';
-  };
+          if [ -f "$PREV" ]; then
+            set -- $(cat "$PREV")
+            p_total=$1
+            p_idle=$2
 
-  home.file.".local/bin/i3blocks-net" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      if [ "$BLOCK_BUTTON" = "1" ]; then # left click open nmtui in kitty
-        exec kitty -e nmtui
-        exit
-      fi
+            diff_total=$((total - p_total))
+            diff_idle=$((idle - p_idle))
 
-      if ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; then
-        echo "UP"
-        echo "UP"
-        echo "#a3be8c"  # green
-      else
-        echo "DOWN"
-        echo "DOWN"
-        echo "#bf616a"  # red
-      fi
-    '';
-  };
+            if [ "$diff_total" -gt 0 ]; then
+              usage=$(( (100 * (diff_total - diff_idle)) / diff_total ))
+            else
+              usage=0
+            fi
+          else
+            usage=0
+          fi
 
-  home.file.".local/bin/i3blocks-cpu" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      PREV=/tmp/.i3blocks_cpu_prev
+          echo "CPU $usage%"
+          echo "$usage%"
+          echo ""
 
-      read _ user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat
-      total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+          echo "$total $idle" > "$PREV"
+        '';
+        interval = 2;
+      };
 
-      if [ -f "$PREV" ]; then
-        read p_total p_idle < "$PREV"
-        diff_total=$((total - p_total))
-        diff_idle=$((idle - p_idle))
-        if [ "$diff_total" -gt 0 ]; then
-          usage=$(( (100 * (diff_total - diff_idle)) / diff_total ))
-        else
-          usage=0
-        fi
-      else
-        usage=0
-      fi
+      memory = lib.hm.dag.entryAfter [ "cpu" ] {
+        command = ''
+          #!/usr/bin/env sh
+          meminfo=$(grep -E "Mem(Total|Available):" /proc/meminfo)
+          total=$(echo "$meminfo" | awk '/MemTotal/ {print $2}')
+          avail=$(echo "$meminfo" | awk '/MemAvailable/ {print $2}')
+          used=$((total - avail))
+          percent=$((100 * used / total))
 
-      echo "CPU $usage%"
-      echo "$usage%"
-      echo ""
+          echo "Mem $percent%"
+          echo "$percent%"
+          echo ""
+        '';
+        interval = 5;
+      };
 
-      echo "$total $idle" > "$PREV"
-    '';
-  };
-
-  home.file.".local/bin/i3blocks-mem" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      meminfo=$(grep -E "Mem(Total|Available):" /proc/meminfo)
-      total=$(echo "$meminfo" | awk "/MemTotal/ {print \$2}")
-      avail=$(echo "$meminfo" | awk "/MemAvailable/ {print \$2}")
-      used=$((total - avail))
-      percent=$((100 * used / total))
-
-      echo "Mem $percent%"
-      echo "$percent%"
-      echo ""
-    '';
+      time = lib.hm.dag.entryAfter [ "memory" ] {
+        command = "date '+%Y-%m-%d %H:%M'";
+        interval = 60;
+      };
+    };
   };
 }
