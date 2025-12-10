@@ -70,18 +70,7 @@ in
 
   home.file.".aws/config".source = "${cfg}/aws/config"; 
   home.file.".aws/credentials".source = "${cfg}/aws/credentials"; 
-  home.file."Git/init.sh".text = ''
-    #!/usr/bin/env bash
-    gh api "/orgs/Arm-Debug/repos?per_page=100" --paginate \
-      | jq -r '.[].name' \
-      | while read repo; do
-          if gh api -H "Accept: application/vnd.github.v3.raw" \
-             "/repos/Arm-Debug/$repo/contents/.github/CODEOWNERS" 2>/dev/null \
-             | grep -q "@Arm-Debug/services"; then
-               git clone "git@github.com:Arm-Debug/$repo.git"
-          fi
-        done
-  ''; 
+  home.file."Git/.keep".text = "ensure ~/Git directory exists";
 
   programs.fish = {
     enable = true;

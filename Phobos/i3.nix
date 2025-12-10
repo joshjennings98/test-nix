@@ -19,10 +19,11 @@
   
   home.packages = with pkgs; [
     arandr
+    brightnessctl
     dmenu
-    i3lock
     pamixer
     pythonScripts.workspaceNames
+    xorg.xrandr
   ];
 
   programs.feh.enable = true;
@@ -31,9 +32,7 @@
 
   home.file."setup.sh" = {
     executable = true;
-    text = (import ./setup.nix {
-      pkgs = pkgs;
-    });
+    text = (import ./setup.nix { pkgs = pkgs; });
   };
 
   systemd.user.services.nm-applet = {
@@ -61,79 +60,81 @@
   };
 
   programs.autorandr = {
-    enable = true;
+    enable = false;
     profiles = {
       "work" = {
         fingerprint = {
-          "eDP-1"   = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-          "DP-1-2"  = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-          "DP-1-1-8" = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+          "eDP-1"    = "placeholder";
+          "DP-2-2"   = "placeholder";
+          "DP-2-1-8" = "placeholder";
         };
         config = {
           "DP-1"     = { enable = false; };
           "HDMI-1"   = { enable = false; };
           "DP-2"     = { enable = false; };
-          "HDMI-2"   = { enable = false; };
-          "DP-1-1"   = { enable = false; };
-          "DP-1-1-1" = { enable = false; };
-          "DP-1-3"   = { enable = false; };
-          "DP-1-2" = {
+          "DP-3"     = { enable = false; };
+          "DP-4"     = { enable = false; };
+          "DP-5"     = { enable = false; };
+          "DP-2-1"   = { enable = false; };
+          "DP-2-1-1" = { enable = false; };
+          "DP-2-3"   = { enable = false; };
+          "DP-2-2"   = {
             enable   = true;
-            crtc     = 1;
+            crtc     = 2;
             primary  = false;
             position = "0x0";
             mode     = "2560x1440";
             rate     = "59.95";
             rotate   = "left";
           };
-          "DP-1-1-8" = {
+          "DP-2-1-8" = {
             enable   = true;
-            crtc     = 2;
+            crtc     = 1;
             primary  = false;
             position = "1440x566";
             mode     = "2560x1440";
             rate     = "59.95";
             rotate   = "normal";
           };
-          "eDP-1" = {
+          "eDP-1"    = {
             enable   = true;
             crtc     = 0;
             primary  = true;
-            position = "4000x926";
-            mode     = "1920x1080";
-            rate     = "60.02";
+            position = "4000x806";
+            mode     = "1920x1200";
+            rate     = "60.00";
             rotate   = "normal";
           };
         };
       };
       "laptop" = {
         fingerprint = {
-          "eDP-1"   = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+          "eDP-1"   = "placeholder";
         };
         config = {
-          "eDP-1" = {
+          "eDP-1"    = {
             enable   = true;
             primary  = true;
             position = "0x0";
-            mode     = "1920x1080";
-            rate     = "60.02";
+            mode     = "1920x1200";
+            rate     = "60.00";
             rotate   = "normal";
           };
           "DP-1"     = { enable = false; };
           "HDMI-1"   = { enable = false; };
           "DP-2"     = { enable = false; };
-          "HDMI-2"   = { enable = false; };
-          "DP-1-1"   = { enable = false; };
-          "DP-1-1-1" = { enable = false; };
-          "DP-1-3"   = { enable = false; };
-          "DP-1-2"   = { enable = false; };
-          "DP-1-1-8" = { enable = false; };
+          "DP-3"     = { enable = false; };
+          "DP-4"     = { enable = false; };
+          "DP-5"     = { enable = false; };
+          "DP-2-1"   = { enable = false; };
+          "DP-2-1-1" = { enable = false; };
+          "DP-2-3"   = { enable = false; };
+          "DP-2-2"   = { enable = false; };
+          "DP-2-1-8" = { enable = false; };
         };
       };
     };
   };
-    
-  services.autorandr.enable = true;
 
   xsession.windowManager.i3 = {
     enable = true;
@@ -149,10 +150,29 @@
         };
       }];
       startup = [ 
-        { command = "autorandr -c"; }
-        { command = "feh --bg-fill ~/Pictures/Wallpapers/wallpaper.jpg"; }
+        { command = "monitors"; }
+        { command = "slack"; }
         { command = "exec --no-startup-id systemctl --user start nm-applet.service"; }
+        { command = "monitor-watcher"; }
         { command = "i3-workspace-names-daemon"; }
+      ];
+      assigns = {
+        "number 2" = [{ class = "firefox"; }];
+        "number 3" = [{ class = "^Slack$"; }];
+      };
+      workspaceOutputAssign = [
+        {
+          output = "eDP-1";
+          workspace = "3";
+        }
+        {
+          output = "DP-2-2";
+          workspace = "2";
+        }
+        {
+          output = "DP-2-1-8";
+          workspace = "1";
+        }
       ];
       window = {
         border = 2;
@@ -207,10 +227,16 @@
         interval = 1;
       };
 
-      network = lib.hm.dag.entryAfter [ "volume" ] {
+      battery = lib.hm.dag.entryAfter [ "volume" ] {
+        command = "i3blocks-battery";
+        interval = 60;
+      };
+
+      network = lib.hm.dag.entryAfter [ "battery" ] {
         command = "i3blocks-net";
         interval = 5;
       };
+      
 
       cpu = lib.hm.dag.entryAfter [ "network" ] {
         command = "i3blocks-cpu";
@@ -219,12 +245,12 @@
 
       memory = lib.hm.dag.entryAfter [ "cpu" ] {
         command = "i3blocks-mem";
-        interval = 5;
+        interval = 10;
       };
 
       date = lib.hm.dag.entryAfter [ "memory" ] {
         command = "date +' Date: %Y-%m-%d '";
-        interval = 60;
+        interval = 10;
       };
 
       time = lib.hm.dag.entryAfter [ "date" ] {
@@ -335,13 +361,53 @@
     '';
   };
 
+  home.file.".local/bin/i3blocks-battery" = {
+    executable = true;
+    text = ''
+      #!/usr/bin/env bash
+      bat=$(ls /sys/class/power_supply | grep -i BAT | head -n 1)
+      pct=$(cat /sys/class/power_supply/$bat/capacity)
+      stat=$(cat /sys/class/power_supply/$bat/status)
+
+      echo " Battery: $pct% "
+      echo "$pct%"
+
+      if (( pct < 20 )); then
+        echo "#ff000"
+        exit 0
+      fi
+
+      if [[ "$stat" == "Discharging" ]]; then      
+        echo "#ffff00"
+      else
+        echo "#ffffff"
+      fi
+    '';
+  };
+
   home.file.".local/bin/monitors" = {
     executable = true;
     text = ''
       #!/usr/bin/env bash
-      autorandr -c
+      ${pkgs.autorandr}/bin/autorandr --change
       sleep 0.2
-      feh --bg-fill ~/Pictures/Wallpapers/wallpaper.jpg
+      ${pkgs.feh}/bin/feh --bg-fill ~/Pictures/Wallpapers/wallpaper.jpg
+    '';
+  };
+
+  home.file.".local/bin/monitor-watcher" = {
+    executable = true;
+    text = ''
+      #!/usr/bin/env bash
+      prev=""
+      while true; do
+        current="$(${pkgs.xorg.xrandr}/bin/xrandr --query 2>/dev/null)"
+        if [ -n "$prev" ] && [ "$current" != "$prev" ]; then
+          monitors
+        fi
+        prev="$current"
+        sleep 2
+      done
     '';
   };
 }
