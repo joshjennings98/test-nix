@@ -19,16 +19,20 @@
   
   home.packages = with pkgs; [
     arandr
+    blueman
     brightnessctl
     dmenu
     pamixer
     pythonScripts.workspaceNames
+    srandrd
     xorg.xrandr
   ];
 
   programs.feh.enable = true;
 
   home.file."Pictures/Wallpapers/wallpaper.jpg".source = ./assets/wallpaper.jpg;
+
+  home.file.".config/nix/nix.conf".text = "experimental-features = nix-command flakes";
 
   home.file."setup.sh" = {
     executable = true;
@@ -142,7 +146,7 @@
       modifier = "Mod1";
       terminal = "kitty";
       bars = [{ 
-        statusCommand = "i3blocks";
+        statusCommand = "i3status-rs config-default.toml";
         position = "top";
         fonts = {
           names = [ "Iosevka" ];
@@ -150,11 +154,14 @@
         };
       }];
       startup = [ 
-        { command = "monitors"; }
-        { command = "slack"; }
+        { command = ''exec --no-startup-id "monitors --force"''; }
         { command = "exec --no-startup-id systemctl --user start nm-applet.service"; }
-        { command = "monitor-watcher"; }
-        { command = "i3-workspace-names-daemon"; }
+        { command = ''exec --no-startup-id "srandrd monitors --force''; }
+        { command = "exec --no-startup-id i3-workspace-names-daemon"; }
+        { command = ''exec --no-startup-id "xss-lock -- lock-script"''; }
+        { command = "exec --no-startup-id blueman-applet"; }
+        { command = "slack"; }
+        { command = "firefox"; }
       ];
       assigns = {
         "number 2" = [{ class = "firefox"; }];
@@ -182,11 +189,12 @@
       workspaceAutoBackAndForth = true;
       keybindings = {
         "${modifier}+Shift+z"   = ''exec "i3-nagbar -t warning -m 'Do you want to reboot or shutdown?' -b 'shutdown' 'i3-msg exec shutdown 0' -b 'reboot' 'i3-msg exec reboot'"'';
-        "${modifier}+z"         = "exec i3lock -c 000000";
+        "${modifier}+z"         = "exec lock-script";
         "${modifier}+Return"    = "exec ${terminal}";
         "${modifier}+semicolon" = "exec i3-dmenu-desktop --dmenu='dmenu -i -fn Iosevka-14 -nb #000000 -nf #ffffff'";
         "${modifier}+Shift+x"   = "kill";
-        "${modifier}+Shift+c"   = "exec monitors";
+        "${modifier}+c"         = "exec monitors";
+        "${modifier}+Shift+c"   = "exec monitors --force";
         "${modifier}+h"         = "focus left";
         "${modifier}+j"         = "focus down";
         "${modifier}+k"         = "focus up";
@@ -215,199 +223,113 @@
         "${modifier}+Shift+i"   = "move container to workspace number 8";
         "${modifier}+Shift+o"   = "move container to workspace number 9";
         "${modifier}+Shift+p"   = "move container to workspace number 10";
+        "XF86AudioMicMute"      = "exec pamixer --default-source -t";
+        "XF86AudioMute"         = "exec pamixer -t";
+        "XF86AudioRaiseVolume"  = "exec pamixer -i 5";
+        "XF86AudioLowerVolume"  = "exec pamixer -d 5";
+        "XF86MonBrightnessUp"   = "exec brightnessctl set +10%";
+        "XF86MonBrightnessDown" = "exec brightnessctl set 10%-";
       };
     };
   };
 
-  programs.i3blocks = {
+  programs.i3status-rust = {
     enable = true;
-    bars.config = {
-      volume = {
-        command = "i3blocks-volume";
-        interval = 1;
-      };
-
-      battery = lib.hm.dag.entryAfter [ "volume" ] {
-        command = "i3blocks-battery";
-        interval = 60;
-      };
-
-      network = lib.hm.dag.entryAfter [ "battery" ] {
-        command = "i3blocks-net";
-        interval = 5;
-      };
-      
-
-      cpu = lib.hm.dag.entryAfter [ "network" ] {
-        command = "i3blocks-cpu";
-        interval = 2;
-      };
-
-      memory = lib.hm.dag.entryAfter [ "cpu" ] {
-        command = "i3blocks-mem";
-        interval = 10;
-      };
-
-      date = lib.hm.dag.entryAfter [ "memory" ] {
-        command = "date +' Date: %Y-%m-%d '";
-        interval = 10;
-      };
-
-      time = lib.hm.dag.entryAfter [ "date" ] {
-        command = "date +' Time: %H:%M '";
-        interval = 10;
+    bars = {
+      default = {
+        settings = {
+          theme = {
+            overrides = {
+              good_fg = "#ffffff"; idle_fg = "#ffffff"; info_fg = "#ffffff";
+              warning_fg = "#bbbbbb"; critical_fg = "#ff0000"; start_separator = "";    
+            };
+          };
+        };
+        blocks = [
+          {
+            block = "cpu";
+            interval = 2;
+            format = " CPU: $utilization.eng(w:2,pad_with:0) ";
+            format_alt = " CPU: $barchart $frequency ";
+            click = [
+              { button = "left";  cmd = "kitty -e htop -s PERCENT_CPU"; }
+              { button = "right"; action = "toggle_format"; }
+            ];
+          }
+          {
+            block = "memory";
+            format = " Memory: $mem_used.eng(w:3,u:B,p:Mi) ($mem_total_used_percents.eng(w:2,pad_with:0)) ";
+            format_alt = " Memory: used = $mem_used.eng(w:3,u:B,p:Mi) avail =$mem_avail.eng(w:3,u:B,p:Mi) total =$mem_total.eng(w:3,u:B,p:Mi) ";
+            click = [
+              { button = "left";  cmd = "kitty -e htop -s PERCENT_MEM"; }
+              { button = "right"; action = "toggle_format"; }
+            ];
+          }
+          {
+            block = "net";
+            format = " Network: $ip ";
+            click = [ { button = "left"; cmd = "kitty -e nmtui"; } ];
+          }
+          {
+            block = "battery";
+            format = " Battery: $percentage {($time_remaining.dur(hms:true, min_unit:m))|} ";
+            not_charging_format = " Battery: $percentage {($time_remaining.dur(hms:true, min_unit:m))|} ";
+            charging_format = " Battery $percentage ⚡ ";
+            full_format = " Battery: 100% ";
+          }
+          {
+            block = "sound";
+            format = " Volume: {$volume.eng(w:2)|Muted} ";
+          }
+          {
+            block = "time";
+            format = " $timestamp.datetime(f:'%a %d %h - %R') ";
+            interval = 10;
+            click = [
+              { button = "left";  cmd = "lock-script"; }
+              { button = "right"; cmd = "i3-nagbar -t warning -m 'Do you want to reboot or shutdown?' -b 'shutdown' 'i3-msg exec shutdown 0' -b 'reboot' 'i3-msg exec reboot'"; }
+            ];
+          }
+        ];
       };
     };
-  };
-
-  home.file.".local/bin/i3blocks-volume" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      STEP=5
-
-      case "$BLOCK_BUTTON" in
-        1) pamixer -t ;;          # left click: mute/unmute
-        4) pamixer -i "$STEP" ;;  # scroll up: volume up
-        5) pamixer -d "$STEP" ;;  # scroll down: volume down
-      esac
-
-      vol=$(pamixer --get-volume 2>/dev/null || echo 0)
-      muted=$(pamixer --get-mute 2>/dev/null || echo false)
-
-      if [ "$muted" = "true" ]; then
-        echo "Volume: muted "
-        echo "muted"
-        echo "#888888"
-      else
-        echo "Volume: $vol% "
-        echo "$vol%"
-        echo "#ffffff"
-      fi
-    '';
-  };
-
-  home.file.".local/bin/i3blocks-net" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      if [ "$BLOCK_BUTTON" = "1" ]; then
-        exec kitty -e nmtui
-      fi
-
-      if ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; then
-        echo " Network: Up "
-        echo "UP"
-        echo "#ffffff"
-      else
-        echo " Network: Down "
-        echo "DOWN"
-        echo "#ff0000"
-      fi
-    '';
-  };
-
-  home.file.".local/bin/i3blocks-cpu" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      if [ "$BLOCK_BUTTON" = "1" ]; then
-        exec kitty -e htop -s PERCENT_CPU
-      fi
-
-      PREV=/tmp/.i3blocks_cpu_prev
-
-      read _ user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat
-      total=$((user + nice + system + idle + iowait + irq + softirq + steal))
-
-      if [ -f "$PREV" ]; then
-        read p_total p_idle < "$PREV"
-        diff_total=$((total - p_total))
-        diff_idle=$((idle - p_idle))
-        if [ "$diff_total" -gt 0 ]; then
-          usage=$(( (100 * (diff_total - diff_idle)) / diff_total ))
-        else
-          usage=0
-        fi
-      else
-        usage=0
-      fi
-
-      echo " CPU: $usage% "
-      echo "$usage%"
-      echo "#ffffff"
-
-      echo "$total $idle" > "$PREV"
-    '';
-  };
-
-  home.file.".local/bin/i3blocks-mem" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      if [ "$BLOCK_BUTTON" = "1" ]; then
-        exec kitty -e htop -s PERCENT_MEM
-      fi
-
-      meminfo=$(grep -E "Mem(Total|Available):" /proc/meminfo)
-      total=$(echo "$meminfo" | awk "/MemTotal/ {print \$2}")
-      avail=$(echo "$meminfo" | awk "/MemAvailable/ {print \$2}")
-      used=$((total - avail))
-      percent=$((100 * used / total))
-
-      echo " Memory: $percent% "
-      echo "$percent%"
-      echo "#ffffff"
-    '';
-  };
-
-  home.file.".local/bin/i3blocks-battery" = {
-    executable = true;
-    text = ''
-      #!/usr/bin/env bash
-      bat=$(ls /sys/class/power_supply | grep -i BAT | head -n 1)
-      pct=$(cat /sys/class/power_supply/$bat/capacity)
-      stat=$(cat /sys/class/power_supply/$bat/status)
-
-      echo " Battery: $pct% "
-      echo "$pct%"
-
-      if (( pct < 20 )); then
-        echo "#ff000"
-        exit 0
-      fi
-
-      if [[ "$stat" == "Discharging" ]]; then      
-        echo "#ffff00"
-      else
-        echo "#ffffff"
-      fi
-    '';
   };
 
   home.file.".local/bin/monitors" = {
     executable = true;
     text = ''
       #!/usr/bin/env bash
-      ${pkgs.autorandr}/bin/autorandr --change
+      if [ -n "$SRANDRD_OUTPUT" && -n "$SRANDRD_EVENT" ]; then
+        echo "srandrd: $SRANDRD_OUTPUT $SRANDRD_EVENT"
+      fi
+
+      FORCE_FLAG=""
+      for arg in "$@"; do
+        case "$arg" in
+          --force)
+            FORCE_FLAG="--force"
+            ;;
+        esac
+      done
+
+      if [ -n "$FORCE_FLAG" ]; then
+        ${pkgs.autorandr}/bin/autorandr --change laptop
+      fi
+
+      ${pkgs.autorandr}/bin/autorandr --change $FORCE_FLAG
       sleep 0.2
       ${pkgs.feh}/bin/feh --bg-fill ~/Pictures/Wallpapers/wallpaper.jpg
     '';
   };
 
-  home.file.".local/bin/monitor-watcher" = {
+  home.file.".local/bin/lock-script" = {
     executable = true;
     text = ''
       #!/usr/bin/env bash
-      prev=""
-      while true; do
-        current="$(${pkgs.xorg.xrandr}/bin/xrandr --query 2>/dev/null)"
-        if [ -n "$prev" ] && [ "$current" != "$prev" ]; then
-          monitors
-        fi
-        prev="$current"
-        sleep 2
-      done
+      i3lock -n -c 000000
+      sleep 0.5
+      monitors --force
     '';
   };
 }
+

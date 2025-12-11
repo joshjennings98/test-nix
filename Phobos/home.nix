@@ -95,6 +95,7 @@ in
     };
   };
 
+  # NOTE: See this issue is still happening nix-community/home-manager/issues/1654
   programs.gh = {
     enable = true;
     gitCredentialHelper.enable = true; # should work for private go modules tool
@@ -167,6 +168,16 @@ in
     theme = {
       name = "gruvbox-dark";
       package = "${pkgs.gruvbox-dark-gtk}";
+    };
+  };
+
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "text/html" = [ "firefox.desktop" ];
+      "text/xml" = [ "firefox.desktop" ];
+      "x-scheme-handler/http" = [ "firefox.desktop" ];
+      "x-scheme-handler/https" = [ "firefox.desktop" ];
     };
   };
 
