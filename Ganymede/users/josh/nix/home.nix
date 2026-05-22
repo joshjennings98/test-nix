@@ -15,8 +15,6 @@ in
   };
 
   imports = [
-    inputs.impermanence.nixosModules.home-manager.impermanence
-
     ./firefox.nix
     ./i3.nix
   ];
@@ -31,7 +29,7 @@ in
     };
   };
 
-  home.persistence."/persist/home/josh" = {
+  home.persistence."/persist" = {
     directories = [
       "Downloads"
       "Music"
@@ -58,7 +56,6 @@ in
       ".screenrc"
       ".local/share/fish/fish_history" # persist fish history
     ];
-    allowOther = true;
   };
 
   programs.home-manager.enable = true;
