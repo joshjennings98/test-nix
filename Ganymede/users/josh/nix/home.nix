@@ -515,5 +515,5 @@ in
 
   systemd.user.startServices = "sd-switch"; # Nicely reload system units when changing configs
 
-  home.stateVersion = "26.05"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "25.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }
