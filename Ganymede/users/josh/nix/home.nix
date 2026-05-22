@@ -15,6 +15,8 @@ in
   };
 
   imports = [
+    impermanence.nixosModules.impermanence
+
     ./firefox.nix
     ./i3.nix
   ];
