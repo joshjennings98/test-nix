@@ -48,6 +48,8 @@ EOF
 
             doCheck = false;
 
+            format = "setuptools";
+
             meta = with lib; {
                 inherit description;
             };

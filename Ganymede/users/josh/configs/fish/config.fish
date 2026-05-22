@@ -17,10 +17,6 @@ if status is-interactive
     bind \e\[A 'if not commandline --paging-mode ; fzf_select_history (commandline -b) ; else ; commandline --function up-line ; end'
     # ctrl + e -> edit current command in $EDITOR
     bind \ce edit_command_buffer
-    # ctrl + p -> search all filenames in current directory (recursive)
-    bind \cp 'fzf_file_search (commandline -b)'
-    # ctrl + s -> search for string (regex) in files in current directory (recursive)
-    bind \cs 'search_files (commandline -b)'
 end
 
 #############
@@ -35,36 +31,6 @@ function fzf_select_history --description "Search command history using fzf"
         and commandline -- $result
     end
     commandline -f repaint
-end
-
-function fzf_file_search --description "Search for files in current directory (recusively) using fzf"
-    if test (count $argv) = 0
-        set fzf_flags --reverse --preview 'echo -e "{+}\n" ; bat --color=always {}' --preview-window 50%
-    else
-        set fzf_flags --reverse --query "$argv" --preview 'echo -e "{+}\n" ; bat --color=always {}' --preview-window 50%
-    end
-
-    set files (find . -type f -not -path "*/\.git/*" 2>&1 | grep -v "Permission denied" | fzf $fzf_flags | string split0)
-
-    if [ $files ]
-        $EDITOR (echo $files | sed -e '/^$/d' -e 's/\n/ /g')
-    end
-end
-
-function search_files --description "Search for a string (regex) in the files in the current directory (recursively) using fzf and ripgrep"
-    set -x RG_PREFIX rg --column --line-number --no-heading --smart-case
-    set -l file
-    set file (
-        FZF_DEFAULT_COMMAND="$RG_PREFIX '$argv'" \
-            fzf --sort \
-                --reverse \
-                --phony -q "$argv" \
-                --delimiter : \
-                --preview 'bat --color=always {1} --highlight-line {2} --line-range {2}:' \
-                --bind "change:reload:$RG_PREFIX {q} || true" \
-                --preview-window="up:60%"
-    )
-    and $EDITOR (echo $file | awk -F: '{ printf "%s:%s", $1,$2 }')
 end
 
 function edit_command_buffer --description "Open the current command buffer in a text editor ($EDITOR) to make modifying long/multiline commands easier"
@@ -100,20 +66,12 @@ function .. --description "Go up N directories"
     end
 end
 
-function envsource --description "Source standard env files using fish"
-    for line in (cat $argv | grep -v '^#' | grep -v '^\s*$')
-        set -l item (string split -m 1 '=' $line)
-        set -gx $item[1] (string trim --chars=\'\" $item[2])
-        echo "Exported key $item[1]"
-    end
-end
-
 #################
 # ABBREVIATIONS #
 #################
 
 abbr --add extract tar -xvzf
-abbr --add archive tat -cvzf
+abbr --add archive tar -cvzf
 
 abbr --add newpush git push --set-upstream origin \(git branch --show-current\)
 abbr --add gca git commit --amend --no-edit \&\& git push --force
@@ -121,8 +79,6 @@ abbr --add gca git commit --amend --no-edit \&\& git push --force
 ###########
 # ALIASES #
 ###########
-
-alias lsalias="echo Aliases: && grep -in --color -e '^alias\s+*' ~/.config/fish/config.fish | grep -v lsalias | sed -e 's/alias //' -e 's/=.*\s*#/  -> /' -e 's/[[:digit:]]*://' | grep --colour -e '[a-z\.]*  ' && echo -e \"\nAbbreviations:\" && abbr | sed -e 's/.* -- //g' -e 's/ \'/  ->  /g' -e 's/^test\$/test  ->  test files using fzf/' | tr -d \"'\" | grep --colour -e  '^[^ ]*'" # horrible snippet to list aliases and abbreviations
 
 alias la='ls -aF' # list all files (including hidden)
 alias ll='ls -lhFBA' # list all files (including hidden) in a human readable way
@@ -167,7 +123,6 @@ function fish_prompt
 
     printf '%s' (echo $USER@)
     printf '%s ' (hostname)
-    #printf '[%s] ' (kubectl config current-context)
     printf '%s' (__fish_git_prompt) | sed -e 's/ //' -e 's/$/ /' -e 's/(/[/' -e 's/)/]/'
 
     set_color $fish_color_cwd

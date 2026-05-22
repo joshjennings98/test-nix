@@ -1,0 +1,19 @@
+diff --git a/config.def.h b/config.def.h
+--- a/config.def.h
++++ b/config.def.h
+@@ -282,6 +282,7 @@ static Key key[] = {
+ 	{ XK_KP_Delete,     XK_ANY_MOD,     "\033[3~",      +1,    0},
+ 	{ XK_KP_Multiply,   XK_ANY_MOD,     "\033Oj",       +2,    0},
+ 	{ XK_KP_Add,        XK_ANY_MOD,     "\033Ok",       +2,    0},
++	{ XK_KP_Enter,      ShiftMask,      "\033[13;2u",    0,    0},
+ 	{ XK_KP_Enter,      XK_ANY_MOD,     "\033OM",       +2,    0},
+ 	{ XK_KP_Enter,      XK_ANY_MOD,     "\r",           -1,    0},
+ 	{ XK_KP_Subtract,   XK_ANY_MOD,     "\033Om",       +2,    0},
+@@ -334,6 +335,7 @@ static Key key[] = {
+ 	{ XK_Right,         XK_ANY_MOD,     "\033OC",        0,   +1},
+ 	{ XK_ISO_Left_Tab,  ShiftMask,      "\033[Z",        0,    0},
+ 	{ XK_Return,        Mod1Mask,       "\033\r",        0,    0},
++	{ XK_Return,        ShiftMask,      "\033[13;2u",    0,    0},
+ 	{ XK_Return,        XK_ANY_MOD,     "\r",            0,    0},
+ 	{ XK_Insert,        ShiftMask,      "\033[4l",      -1,    0},
+ 	{ XK_Insert,        ShiftMask,      "\033[2;2~",    +1,    0},

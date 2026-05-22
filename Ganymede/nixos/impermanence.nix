@@ -1,39 +1,52 @@
-{ lib, pkgs, inputs, ... }: {
+{ inputs, ... }: {
 
   imports = [
     inputs.impermanence.nixosModules.impermanence
   ];
 
-  boot.initrd.postDeviceCommands = lib.mkAfter ''
-  
-  # Mount old root
-  mkdir /btrfs_tmp
-  mount /dev/root_vg/root /btrfs_tmp
+  boot.initrd.systemd.services.impermanence-rollback-root = {
+    description = "Rollback Btrfs root subvolume to known clean state for use in impermanence"; # https://github.com/nix-community/impermanence/blob/master/README.org#impermanence
 
-  # Backup previous root
-  if [[ -e /btrfs_tmp/root ]]; then
-    mkdir -p /btrfs_tmp/old_roots
-    timestamp=$(date --date="@$(stat -c %Y /btrfs_tmp/root)" "+%Y-%m-%-d_%H:%M:%S")
-    mv /btrfs_tmp/root "/btrfs_tmp/old_roots/$timestamp"
-  fi
+    wantedBy = [ "initrd.target" ];
+    before   = [ "sysroot.mount" ];
+    after    = ["systemd-cryptsetup@enc.service"];
 
-  # Delete backups older than 7 days
-  delete_subvolume_recursively() {
-    IFS=$'\n'
-    for i in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
-      delete_subvolume_recursively "/btrfs_tmp/$i"
-    done
-    btrfs subvolume delete "$1" || exit 1
-  }
+    unitConfig.DefaultDependencies = "no";
 
-  for i in $(find /btrfs_tmp/old_roots/ -maxdepth 1 -mtime +7); do
-    delete_subvolume_recursively "$i"
-  done
+    serviceConfig.Type = "oneshot";
 
-  # Create new clean root    
-  btrfs subvolume create /btrfs_tmp/root
-  umount /btrfs_tmp
-  '';
+    script = ''
+      set -x
+      
+      # Mount old root
+      mkdir /btrfs_tmp
+      mount /dev/root_vg/root /btrfs_tmp
+
+      # Backup previous root
+      if [[ -e /btrfs_tmp/root ]]; then
+        mkdir -p /btrfs_tmp/old_roots
+        timestamp=$(date --date="@$(stat -c %Y /btrfs_tmp/root)" "+%Y-%m-%-d_%H:%M:%S")
+        mv /btrfs_tmp/root "/btrfs_tmp/old_roots/$timestamp"
+      fi
+
+      # Delete backups older than 7 days
+      delete_subvolume_recursively() {
+        IFS=$'\n'
+        for i in $(btrfs subvolume list -o "$1" | cut -f 9- -d ' '); do
+          delete_subvolume_recursively "/btrfs_tmp/$i"
+        done
+        btrfs subvolume delete "$1" || exit 1
+      }
+
+      for i in $(find /btrfs_tmp/old_roots/ -maxdepth 1 -mtime +7); do
+        delete_subvolume_recursively "$i"
+      done
+
+      # Create new clean root    
+      btrfs subvolume create /btrfs_tmp/root
+      umount /btrfs_tmp
+    '';
+  };
 
   programs.fuse.userAllowOther = true;
 

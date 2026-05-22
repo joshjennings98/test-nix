@@ -20,10 +20,13 @@ end-of-line-diagnostics  = "hint"
 enable = false
 
 [editor.inline-diagnostics]
-cursor-line = "error"
+cursor-line = "warning"
 
 [keys.normal]
 g.o = "jump_backward"
 g.O = "jump_forward"
 esc = "keep_primary_selection"
 G   = "goto_word"
+w   = "expand_selection"
+W   = "shrink_selection"
+C-p = [":w!", ":pipe go-tools debug %{buffer_name}", ":w!"]

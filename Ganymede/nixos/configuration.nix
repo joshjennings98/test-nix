@@ -12,6 +12,8 @@
     ./nvidia.nix
 
     ./users.nix
+
+    ./luks.nix
   ];
 
   # Global nixpkgs settings
@@ -47,7 +49,7 @@
   boot.loader.grub.efiInstallAsRemovable = true;
 
   # Allow mounting of ntfs drives
-  boot.supportedFilesystems = [ "ntfs" ];
+  boot.supportedFilesystems = [ "ntfs" "exfat" ];
 
   # Kernel options
   boot.kernelParams = [
@@ -59,6 +61,9 @@
     "vm.max_map_count" = 16777216;
     "fs.file-max" = 524288;
   };
+
+  # Avahi sevices discovery
+  services.avahi.enable = true;
 
   # Use greetd (CLI greeter) for login
   services.greetd = {
@@ -120,7 +125,7 @@
 
   # Fonts need to be set up in fonts.packages
   fonts.packages = with pkgs; [
-    ubuntu_font_family
+    ubuntu-classic
     iosevka
     font-awesome
   ];
@@ -157,5 +162,5 @@
   zramSwap.enable = true; # recommended for star citizen if you have less than 40GB of RAM https://github.com/fufexan/nix-gaming/tree/master/pkgs/star-citizen
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
-  system.stateVersion = "25.05";
+  system.stateVersion = "26.05";
 }

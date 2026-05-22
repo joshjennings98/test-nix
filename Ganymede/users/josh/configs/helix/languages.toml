@@ -2,6 +2,7 @@
 name = "go"
 rulers = [120]
 auto-format = true
+language-servers = [ "gopls", "golangci-lint-lsp" ]
 
 [language-server.gopls.config.hints]
 assignVariableTypes = true
@@ -10,6 +11,9 @@ constantValues = true
 functionTypeParameters = true
 parameterNames = true
 rangeVariableTypes = true
+
+[language-server.golangci-lint-lsp.config] # temporary since this isn't in mainline release yet
+command = ["golangci-lint", "run", "--output.json.path=stdout", "--show-stats=false", "--issues-exit-code=1"]
 
 [[language]]
 name = "python"
