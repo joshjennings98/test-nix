@@ -8,6 +8,8 @@ in
     overlays = [
       (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix) { inherit pkgs lib; }; })
       (final: pre: { shellScripts = pre.callPackage (import ./shell-scripts.nix) { inherit pkgs lib; }; })
+
+      (import ./overlays/st.nix)
     ]; 
     config = {
       allowUnfree = true;
@@ -96,10 +98,12 @@ in
     ripgrep
     rustc
     rustlings
+    serpl
     spotify
     shellScripts.switch-open-project
     shellScripts.switch-project
     shellScripts.tmux-popup
+    st
     tree
     typst
     unzip

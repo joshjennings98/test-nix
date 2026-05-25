@@ -9,7 +9,10 @@
 
     wantedBy = [ "initrd.target" ];
     before   = [ "sysroot.mount" ];
-    after    = ["systemd-cryptsetup@crypted.service"];
+    after    = [
+      "systemd-cryptsetup@crypted.service"
+      "initrd-root-device.target"
+    ];
 
     unitConfig.DefaultDependencies = "no";
 
@@ -20,7 +23,7 @@
       
       # Mount old root
       mkdir /btrfs_tmp
-      mount /dev/root_vg/root /btrfs_tmp
+      mount -o subvolid=5 /dev/mapper/root_vg-root /btrfs_tmp
 
       # Backup previous root
       if [[ -e /btrfs_tmp/root ]]; then

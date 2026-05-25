@@ -3,7 +3,7 @@
 theme = "gruvbox"
 
 [editor]
-mouse                    = false
+mouse                    = true
 idle-timeout             = 0
 completion-timeout       = 5
 completion-trigger-len   = 1
@@ -30,3 +30,13 @@ G   = "goto_word"
 w   = "expand_selection"
 W   = "shrink_selection"
 C-p = [":w!", ":pipe go-tools debug %{buffer_name}", ":w!"]
+
+[keys.select.space.space]
+t   = ":pipe tmux-popup --stdin -- fish"
+c   = ":pipe tmux-popup --stdin -- claude"
+
+[keys.normal.space.space]
+t   = ":sh tmux-popup       -- fish"
+c   = ":sh tmux-popup       -- claude"
+g   = ":sh tmux-popup       -- lazygit"
+"/" = ":sh tmux-popup --new -- serpl"

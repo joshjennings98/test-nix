@@ -1,4 +1,4 @@
-{ config, ... }:
+{ ... }:
 {
   # https://nixos.wiki/wiki/Nvidia
 
@@ -32,13 +32,10 @@
     # supported GPUs is at: 
     # https://github.com/NVIDIA/open-gpu-kernel-modules#compatible-gpus 
     # Only available from driver 515.43.04+
-    # Currently alpha-quality/buggy, so false is currently the recommended setting.
-    open = false;
+    # Data center GPUs starting from Grace Hopper or Blackwell must use open-source modules — proprietary modules are no longer supported.
+    open = true;
 
     # Enable the Nvidia settings menu accessible via `nvidia-settings`.
     nvidiaSettings = true;
-
-    # As of Oct 13 2024 should be 560.31.02
-    package = config.boot.kernelPackages.nvidiaPackages.beta;
   };
 }
