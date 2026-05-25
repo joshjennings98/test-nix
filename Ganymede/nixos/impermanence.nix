@@ -9,7 +9,7 @@
 
     wantedBy = [ "initrd.target" ];
     before   = [ "sysroot.mount" ];
-    after    = ["systemd-cryptsetup@enc.service"];
+    after    = ["systemd-cryptsetup@crypted.service"];
 
     unitConfig.DefaultDependencies = "no";
 

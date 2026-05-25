@@ -1,6 +1,7 @@
-{ inputs, lib, pkgs, ... }: 
+{ inputs, lib, pkgs, config, ... }:
 let
-  config = ./. + "/../configs";
+  configs = ./. + "/../configs";
+  ai = ./. + "/../ai";
 in
 {
   nixpkgs = {
@@ -15,8 +16,6 @@ in
   };
 
   imports = [
-    inputs.impermanence.nixosModules.impermanence
-
     ./firefox.nix
     ./i3.nix
   ];
@@ -45,7 +44,7 @@ in
       ".local/share/direnv"
       ".cache/wine"
       ".local/state/wireplumber/" # pipewire (if switching to pulseaudio then save ".config/pulse")
-      ".mozilla/firefox" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
+      ".config/mozilla/firefox" # todo: make this more granular so it just saves enabled extensions, layout, dismissed messages, sessions, etc. instead of everything
       ".local/share/Steam"
       ".local/share/mpd"
       ".config/helix/runtime/grammars"
@@ -116,7 +115,7 @@ in
 
   programs.fish = {
     enable = true;
-    interactiveShellInit = builtins.readFile "${config}/fish/config.fish";
+    interactiveShellInit = builtins.readFile "${configs}/fish/config.fish";
   };
 
   programs.fzf.enable = true;
@@ -155,8 +154,8 @@ in
   programs.helix = {
     enable = true;
     defaultEditor = true;
-    settings = lib.importTOML "${config}/helix/config.toml";    
-    languages = lib.importTOML "${config}/helix/languages.toml";    
+    settings = lib.importTOML "${configs}/helix/config.toml";
+    languages = lib.importTOML "${configs}/helix/languages.toml";
   };
 
   programs.kitty = {
@@ -165,7 +164,7 @@ in
     settings = {
       shell = "${pkgs.fish}/bin/fish";
     };
-    extraConfig = builtins.readFile "${config}/kitty/kitty.conf";
+    extraConfig = builtins.readFile "${configs}/kitty/kitty.conf";
   };
 
   programs.mcp = {
@@ -184,14 +183,14 @@ in
     enable = true;
     enableMcpIntegration = true;
     skills = {
-      brainstorming = "${config}/ai/skills/brainstorming";
+      brainstorming = "${ai}/skills/brainstorming";
     };
   };
 
   programs.codex = {
     enable = true;
     enableMcpIntegration = true;
-    context = builtins.readFile "${config}/ai/AGENTS.md";
+    context = builtins.readFile "${ai}/AGENTS.md";
   };
 
   programs.mpv.enable = true;
@@ -511,9 +510,10 @@ in
       name = "gruvbox-dark";
       package = "${pkgs.gruvbox-dark-gtk}";
     };
+    gtk4.theme = config.gtk.theme; # todo: update when moving to 26.05
   };
 
   systemd.user.startServices = "sd-switch"; # Nicely reload system units when changing configs
 
-  home.stateVersion = "25.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "26.05"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }

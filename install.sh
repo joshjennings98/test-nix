@@ -69,8 +69,13 @@ cat << EOF > "/tmp/disko.nix"
             name = "root";
             size = "100%";
             content = {
-              type = "lvm_pv";
-              vg = "root_vg";
+              type = "luks";
+              name = "crypted";
+              settings.allowDiscards = true;
+              content = {
+                type = "lvm_pv";
+                vg = "root_vg";
+              };
             };
           };
         };
@@ -117,22 +122,23 @@ sudo nix --experimental-features "nix-command flakes" run github:nix-community/d
 sudo nixos-generate-config --no-filesystems --root /mnt
 
 # Fetch system flake
-rm -rf $HOME/nix-config
-mkdir $HOME/nix-config
-cd $HOME/nix-config
+rm -rf "$HOME/nix-config"
+mkdir "$HOME/nix-config"
+cd "$HOME/nix-config"
 if [ -z "$ref" ]; then
-  sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#Ganymede
+  nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix#Ganymede
 else
-  sudo nix --experimental-features "nix-command flakes" flake init -t github:joshjennings98/test-nix/$ref#Ganymede
+  nix --experimental-features "nix-command flakes" flake init -t "github:joshjennings98/test-nix/$ref#Ganymede"
 fi
 
-# Copy generated hardware-configuration.nix and disko.nix
-sudo cp /mnt/etc/nixos/hardware-configuration.nix $HOME/nix-config/nixos/
-sudo cp /tmp/disko.nix $HOME/nix-config/nixos/
+# Copy generated hardware-configuration.nix and disko.nix (source files are
+# world-readable so no sudo needed; destination is user-owned)
+cp /mnt/etc/nixos/hardware-configuration.nix "$HOME/nix-config/nixos/"
+cp /tmp/disko.nix "$HOME/nix-config/nixos/"
 
 # Optionally delete flake.lock to get latest packages
 if [ "$no_lock" = true ]; then
-  sudo rm $HOME/nix-config/flake.lock
+  rm "$HOME/nix-config/flake.lock"
 fi
 
 # Hash user password to file
@@ -142,5 +148,9 @@ mkpasswd -m sha-512 | sudo tee /mnt/persist/passwords/josh > /dev/null
 # Run the installation
 sudo nixos-install --no-root-passwd --root /mnt --flake '.#Ganymede'
 
-# Copy nix config to /persist
-sudo cp -r $HOME/nix-config/ /mnt/persist/home/josh/
+# Copy nix config to /persist so impermanence picks it up after reboot.
+# The 'josh' user doesn't exist yet on the live ISO, so chown by numeric
+# uid/gid (first NixOS-managed user lands at 1000:100 by default).
+sudo mkdir -p /mnt/persist/home/josh
+sudo cp -r "$HOME/nix-config" /mnt/persist/home/josh/
+sudo chown -R 1000:100 /mnt/persist/home/josh

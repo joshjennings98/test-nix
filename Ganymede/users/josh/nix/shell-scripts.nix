@@ -69,6 +69,6 @@ in
 
   xauto_lock_screen = makeScript {
     filename = ../scripts/xauto_lock_screen.sh;
-    deps = [ pkgs.xorg.xprop pkgs.i3lock ];
+    deps = [ pkgs.xprop pkgs.i3lock ];
   };
 }

@@ -70,7 +70,7 @@
     enable = true;
     settings = {
       default_session = {
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'startx ${pkgs.i3}/bin/i3'";
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --user-menu --cmd 'startx ${pkgs.i3}/bin/i3'";
       };
     };
   };
@@ -155,7 +155,7 @@
   };
 
   # Misc settings
-  time.timeZone = "London/Europe";
+  time.timeZone = "Europe/London";
   i18n = {
     defaultLocale = "en_GB.UTF-8";
   };
