@@ -6,6 +6,7 @@ in
 {
   nixpkgs = {
     overlays = [
+      inputs.emacs-overlay.overlays.default
       (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix) { inherit pkgs lib; }; })
       (final: pre: { shellScripts = pre.callPackage (import ./shell-scripts.nix) { inherit pkgs lib; }; })
 

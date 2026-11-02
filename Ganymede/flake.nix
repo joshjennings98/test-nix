@@ -9,6 +9,16 @@
       inputs.nixpkgs.follows = "nixpkgs"; # use the same version of nixpkgs as specified in the current flake 
     };
 
+    emacs-overlay = {
+      url = "github:nix-community/emacs-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-doom-emacs-unstraightened = {
+      url = "github:marienz/nix-doom-emacs-unstraightened/6abefc203e1b49657e1e4c4e36c07c253a6c333a";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.doomdir.url = "./users/josh/configs/doom";
+    };
+
     impermanence.url = "github:nix-community/impermanence";
 
     disko = {
@@ -27,6 +37,9 @@
   } @ inputs: let
     inherit (self) outputs;
   in {
+    packages.x86_64-linux.emacs-broker =
+      self.nixosConfigurations.Ganymede.pkgs.callPackage ./users/josh/configs/doom/broker { };
+
     # Reload with 'nixos-rebuild --flake .#Ganymede'
     nixosConfigurations = {
       Ganymede = nixpkgs.lib.nixosSystem {

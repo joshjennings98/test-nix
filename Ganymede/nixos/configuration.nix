@@ -12,6 +12,7 @@
     ./nvidia.nix
 
     ./users.nix
+    ../users/josh/nix/doom.nix
 
     ./luks.nix
   ];

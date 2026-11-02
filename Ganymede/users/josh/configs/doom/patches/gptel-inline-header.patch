@@ -1,0 +1,39 @@
+--- a/gptel-inline.el
++++ b/gptel-inline.el
+@@ -573,8 +573,8 @@
+                    (overlay-get response-ov 'gptel-inline-header))
+       (overlay-put
+        response-ov 'gptel-inline-header
+-       (concat "Run tools: " (propertize "C-c C-c" 'face 'help-key-binding)
+-               ", Cancel request: " (propertize "C-c C-k" 'face 'help-key-binding)))
++       (concat "Run tools: " (propertize "SPC a RET" 'face 'help-key-binding)
++               ", Cancel request: " (propertize "SPC a q" 'face 'help-key-binding)))
+       (gptel-inline--update-response-overlay
+        (with-current-buffer (overlay-buffer tco)
+          ;; 1- adjustments for avoiding propertized separator-lines
+@@ -668,21 +668,10 @@
+                     (make-overlay start end)))
+             (overlay-put response-ov 'gptel-inline-height
+                          (gptel-inline--response-overlay-height))
+-            (let ((command-key
+-                   (lambda (sym)
+-                     (propertize (key-description
+-                                  (where-is-internal
+-                                   sym gptel-inline--response-overlay-mode-map t))
+-                                 'face 'help-key-binding))))
+-              (overlay-put
+-               response-ov 'gptel-inline-header
+-               (format "scroll: %s/%s, more: %s"
+-                       ( funcall command-key
+-                         'gptel-inline--response-overlay-pagedown)
+-                       ( funcall command-key
+-                         'gptel-inline--response-overlay-pageup)
+-                       ( funcall command-key
+-                         'gptel-inline--response-overlay-dispatch))))
++            ;; Doom's leader map is outside this minor mode's keymap.
++            (overlay-put response-ov 'gptel-inline-header
++                         (propertize "SPC a: j/k line, J/K page, o actions, v chat"
++                                     'face 'help-key-binding))
+             ;; For buffer-based rendering
+             (let ((src-buf (gptel--temp-buffer " *gptel-inline-response*")))
+               (plist-put context-plist :src src-buf)

@@ -1,0 +1,108 @@
+--- a/gptel-oauth.el
++++ b/gptel-oauth.el
+@@ -40,7 +40,15 @@
+         (print-level nil)
+         (coding-system-for-write 'utf-8-unix))
+     (make-directory (file-name-directory file) t)
+-    (write-region (prin1-to-string token) nil file nil :silent)
++    (let ((temporary (make-temp-file
++                      (expand-file-name ".gptel-oauth-" (file-name-directory file)))))
++      (unwind-protect
++          (progn
++            (set-file-modes temporary #o600)
++            (write-region (prin1-to-string token) nil temporary nil :silent)
++            (rename-file temporary file t))
++        (when (file-exists-p temporary)
++          (delete-file temporary))))
+     token))
+ 
+ (defun gptel-oauth--read-token (file)
+@@ -83,11 +91,13 @@
+ (defun gptel-oauth--generate-code-verifier ()
+   "Generate a PKCE code verifier.
+ 
+-Uses `random' to build a verifier string acceptable to PKCE."
+-  (let ((chars "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"))
+-    (apply #'string
+-           (cl-loop repeat 128
+-                    collect (aref chars (random (length chars)))))))
++Uses 32 bytes from the operating system random source."
++  (with-temp-buffer
++    (set-buffer-multibyte nil)
++    (insert-file-contents-literally "/dev/urandom" nil nil 32)
++    (unless (= (buffer-size) 32)
++      (error "Unable to obtain OAuth randomness"))
++    (gptel-oauth--base64url-encode (buffer-string))))
+ 
+ (defun gptel-oauth--generate-code-challenge (verifier)
+   "Generate a PKCE code challenge from VERIFIER, a code verifier string."
+--- a/gptel-openai-oauth.el
++++ b/gptel-openai-oauth.el
+@@ -154,7 +154,7 @@
+    (url-build-query-string
+     `(("response_type" "code")
+       ("client_id" ,gptel--openai-oauth-client-id)
+-      ("redirect_uri" ,(url-hexify-string redirect-uri))
++      ("redirect_uri" ,redirect-uri)
+       ("scope" "openid profile email offline_access")
+       ("code_challenge" ,(gptel-oauth--generate-code-challenge verifier))
+       ("code_challenge_method" "S256")
+@@ -250,13 +250,8 @@
+                    :service gptel--openai-oauth-redirect-port
+                    :filter #'filter
+                    :noquery t))
+-            (message "OpenAI OAuth authorization URL: %s" authorization-url)
+-            (ignore-errors (gui-set-selection 'CLIPBOARD authorization-url))
+             (read-from-minibuffer
+-             (format "OpenAI OAuth URL copied to clipboard.  \
+-Press ENTER to open the authorization page.  \
+-If your browser does not open automatically, browse to %s: "
+-                     authorization-url))
++             "Press ENTER to sign in with OpenAI in your browser: ")
+             (browse-url authorization-url)
+             (while (and (not code) (not error) (< (float-time) deadline))
+               (accept-process-output nil 1))
+@@ -273,7 +268,7 @@
+                                gptel--openai-oauth-redirect-port
+                                gptel--openai-oauth-redirect-path))
+          (verifier (gptel-oauth--generate-code-verifier))
+-         (state (secure-hash 'sha256 (format "%s%s" (float-time) (random))))
++         (state (gptel-oauth--generate-code-verifier))
+          (authorization-url
+           (gptel--openai-oauth-authorization-url redirect-uri verifier state))
+          (code (gptel--openai-oauth-read-code authorization-url state))
+@@ -285,7 +280,7 @@
+                      ("client_id" ,gptel--openai-oauth-client-id)
+                      ("code" ,code)
+                      ("code_verifier" ,verifier)
+-                     ("redirect_uri" ,(url-hexify-string redirect-uri))))
++                     ("redirect_uri" ,redirect-uri)))
+             :content-type "application/x-www-form-urlencoded")))
+     (gptel--openai-oauth-persist backend token-plist)))
+ 
+--- a/gptel-request.el
++++ b/gptel-request.el
+@@ -1073,9 +1073,20 @@
+         (url-mime-accept-string "application/json")
+         (url-request-extra-headers
+          `(("content-type" . ,content-type) ,@headers)))
+-    (with-current-buffer (url-retrieve-synchronously url 'silent)
+-      (goto-char url-http-end-of-headers)
+-      (gptel--json-read))))
++    (let ((response (url-retrieve-synchronously url 'silent nil 30)))
++      (unless (buffer-live-p response)
++        (user-error "OAuth HTTP request failed or timed out"))
++      (unwind-protect
++          (with-current-buffer response
++            (unless url-http-end-of-headers
++              (user-error "OAuth server returned an invalid HTTP response"))
++            (goto-char url-http-end-of-headers)
++            (condition-case nil
++                (gptel--json-read)
++              (error
++               (user-error "OAuth server returned non-JSON data (HTTP %s)"
++                           url-http-response-status))))
++        (kill-buffer response)))))
+ 
+ (defsubst gptel-prompt-prefix-string ()
+   "Prefix before user prompts in `gptel-mode'."
