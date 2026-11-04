@@ -1,139 +1,261 @@
 ;;; keys.el -*- lexical-binding: t; -*-
 
-(defun josh/gptel-visit-conversation ()
-  "Visit the conversation associated with the prompt or inline response."
+(defun josh/agent-shell-command ()
+  "Choose any public Agent Shell command with Doom's completion interface."
   (interactive)
-  (require 'gptel-inline)
-  (let* ((overlay (gptel-inline--response-overlay-at-point))
-         (base (buffer-base-buffer))
-         (chat (cond
-                (overlay (plist-get (overlay-get overlay 'gptel-inline) :buffer))
-                ((and base (buffer-local-value 'gptel-mode base)) base)
-                (gptel-mode (current-buffer))
-                (t (get-buffer (car (ensure-list
-                                     (gptel-inline-chat-buffer-name (current-buffer)))))))))
-    (unless (buffer-live-p chat)
-      (user-error "No conversation yet; start one with SPC a p"))
-    (gptel-inline-visit-buffer chat)
-    (evil-normal-state)))
+  (require 'agent-shell)
+  (let ((command (completing-read
+                  "Agent command: " obarray
+                  (lambda (symbol)
+                    (and (commandp symbol)
+                         (string-prefix-p "agent-shell-" (symbol-name symbol))
+                         (not (string-match-p "--" (symbol-name symbol)))))
+                  t)))
+    (call-interactively (intern command))))
 
-;; Internal commands below are tied to the pinned package versions.
-(dolist (command '(gptel-inline-cycle-reference gptel-inline-append
-                   gptel-inline-switch-buffer gptel-inline-help
-                   gptel-inline--response-overlay-dispatch
-                   gptel-inline--response-overlay-down
-                   gptel-inline--response-overlay-up
-                   gptel-inline--response-overlay-pagedown
-                   gptel-inline--response-overlay-pageup))
-  (autoload command "gptel-inline" nil t))
-
-(dolist (command '(gptel--rewrite-dispatch gptel--rewrite-accept
-                   gptel--rewrite-iterate gptel--rewrite-reject
-                   gptel--rewrite-diff gptel--rewrite-ediff
-                   gptel--rewrite-next gptel--rewrite-previous gptel--rewrite-merge))
-  (autoload command "gptel-rewrite" nil t))
-
-(dolist (command '(gptel-agent--next-overlay gptel-agent--previous-overlay
-                   gptel-agent-toggle-todos))
-  (autoload command "gptel-agent-tools" nil t))
-
-(autoload 'gptel--suffix-context-buffer "gptel-transient" nil t)
-
-(defun josh/gptel-local-action (key)
-  "Invoke KEY's action in the current gptel interface, preserving its context."
-  (let ((command (key-binding (kbd key))))
-    ;; Never fall through to an unrelated mode's C-c command (e.g. Org).
-    (unless (and (commandp command)
-                 (or (memq command '(gptel-inline-quit
-                                     gptel-inline--accept-tool-calls
-                                     gptel-inline--reject-tool-calls
-                                     gptel--accept-tool-calls gptel--reject-tool-calls
-                                     gptel--inspect-tool-calls
-                                     gptel--inspect-accept-tool-calls
-                                     gptel--inspect-reject-tool-calls
-                                     gptel--inspect-quit-tool-calls
-                                     gptel-context-confirm gptel-context-quit
-                                     gptel-agent--cycle-overlay
-                                     gptel-agent-toggle-todos gptel-markdown-cycle-block
-                                     gptel--continue-query))
-                     ;; These editors install buffer-local closures for their actions.
-                     (member (buffer-name) '("*gptel-prompt*" "*gptel-query*"))))
-      (user-error "No gptel action for %s here" key))
-    (call-interactively command)))
+(defun josh/agent-shell-return ()
+  "Activate the item at point, or submit a prompt in an editable agent buffer."
+  (interactive)
+  (let* ((map (get-char-property (point) 'keymap))
+         (action (and map (lookup-key map (kbd "RET")))))
+    (cond
+     ((commandp action) (call-interactively action))
+     ((button-at (point)) (push-button))
+     ((derived-mode-p 'agent-shell-mode) (call-interactively #'agent-shell-submit))
+     ((derived-mode-p 'agent-shell-viewport-edit-mode)
+      (call-interactively #'agent-shell-viewport-compose-send))
+     (t (user-error "No agent action at point")))))
 
 (map! :leader
       (:prefix ("a" . "agent")
-       :desc "Discuss inline" "p" #'gptel-inline
-       :desc "Open gptel agent" "g" #'gptel-agent
-       :desc "Visit conversation" "v" #'josh/gptel-visit-conversation
-       :desc "Response actions" "o" #'gptel-inline--response-overlay-dispatch
-       :desc "Send prompt" "s" #'gptel-send
-       :desc "Request options" "m" #'gptel-menu
-       :desc "Cycle inline reference" "c" #'gptel-inline-cycle-reference
-       :desc "Append without sending" "a" #'gptel-inline-append
-       :desc "Switch conversation" "b" #'gptel-inline-switch-buffer
-       :desc "Inline help" "h" #'gptel-inline-help
-       :desc "Fold block / tool at point" "f" (cmd! (josh/gptel-local-action "TAB"))
-       :desc "Return from conversation" "u" #'keyboard-quit
-       :desc "Confirm current action" "RET" (cmd! (josh/gptel-local-action "C-c C-c"))
-       :desc "Cancel current action" "q" (cmd! (josh/gptel-local-action "C-c C-k"))
-       :desc "Inspect tools / return" "i" (cmd! (josh/gptel-local-action "C-c C-i"))
-       :desc "Copy inspected query as curl" "y" (cmd! (josh/gptel-local-action "C-c C-w"))
-       :desc "Rewrite selection / options" "r" #'gptel-rewrite
-       :desc "System instructions" "d" #'gptel-system-prompt
-       :desc "Inspect context" "C" #'gptel--suffix-context-buffer
-       :desc "Load / save preset" "@" #'gptel-preset
-       :desc "Preview down" "j" #'gptel-inline--response-overlay-down
-       :desc "Preview up" "k" #'gptel-inline--response-overlay-up
-       :desc "Preview page down" "J" #'gptel-inline--response-overlay-pagedown
-       :desc "Preview page up" "K" #'gptel-inline--response-overlay-pageup
-       (:prefix ("R" . "rewrite review")
-        :desc "Actions at point" "o" #'gptel--rewrite-dispatch
-        :desc "Accept" "a" #'gptel--rewrite-accept
-        :desc "Iterate" "r" #'gptel--rewrite-iterate
-        :desc "Reject" "q" #'gptel--rewrite-reject
-        :desc "Diff" "d" #'gptel--rewrite-diff
-        :desc "Ediff" "e" #'gptel--rewrite-ediff
-        :desc "Merge" "m" #'gptel--rewrite-merge
-        :desc "Next rewrite" "j" #'gptel--rewrite-next
-        :desc "Previous rewrite" "k" #'gptel--rewrite-previous)
-       (:prefix ("t" . "tools")
-        :desc "Select tools" "t" #'gptel-tools
-        :desc "Next tool" "j" #'gptel-agent--next-overlay
-        :desc "Previous tool" "k" #'gptel-agent--previous-overlay
-        :desc "Toggle task list" "T" #'gptel-agent-toggle-todos
-        :desc "Approve pending tools" "a" (cmd! (josh/gptel-local-action "C-c C-c"))
-        :desc "Reject pending tools" "q" (cmd! (josh/gptel-local-action "C-c C-k"))
-        :desc "Inspect / return" "i" (cmd! (josh/gptel-local-action "C-c C-i")))))
+       :desc "Open agent shell" "a" #'agent-shell
+       :desc "New agent shell" "n" #'agent-shell-new-shell
+       :desc "Toggle agent shell" "t" #'agent-shell-toggle
+       :desc "Switch agent shell" "b" #'agent-shell-switch-buffer
+       :desc "Resume session" "R" #'agent-shell-resume-session
+       :desc "Compose prompt" "c" #'agent-shell-prompt-compose
+       :desc "View last interaction" "v" #'agent-shell-viewport-view-last
+       :desc "Send region" "r" #'agent-shell-send-region
+       :desc "Send region or diagnostic" "d" #'agent-shell-send-dwim
+       :desc "Send current file" "f" #'agent-shell-send-file
+       :desc "Send another file" "F" #'agent-shell-send-other-file
+       :desc "Send clipboard image" "i" #'agent-shell-send-clipboard-image
+       :desc "Send screenshot" "s" #'agent-shell-send-screenshot
+       :desc "New worktree shell" "w" #'agent-shell-new-worktree-shell
+       :desc "Discuss inline" "p" #'agent-shell-inline
+       :desc "Message without switching" "m" #'agent-shell-inline-message
+       (:prefix ("e" . "inline response")
+        :desc "Navigate preview" "n" #'agent-shell-inline-navigate
+        :desc "Actions" "o" #'agent-shell-inline--response-overlay-dispatch
+        :desc "Visit / review conversation" "v" #'agent-shell-inline-review
+        :desc "Copy full response" "y" #'agent-shell-inline-copy-response
+        :desc "Clear preview" "c" #'agent-shell-inline-clear-response-overlay
+        :desc "Interrupt agent" "x" #'agent-shell-inline-interrupt
+        :desc "Scroll down" "j" #'agent-shell-inline--response-overlay-down
+        :desc "Scroll up" "k" #'agent-shell-inline--response-overlay-up
+        :desc "Next reply" "J" #'agent-shell-inline-next-message
+        :desc "Previous reply" "K" #'agent-shell-inline-previous-message
+        :desc "Page down" "D" #'agent-shell-inline--response-overlay-pagedown
+        :desc "Page up" "U" #'agent-shell-inline--response-overlay-pageup)
+       :desc "All agent commands" "?" #'josh/agent-shell-command))
 
-(after! gptel-inline
-  ;; Keep C-c RET for sending from the prompt, not opening response actions.
-  (keymap-unset gptel-inline--response-overlay-mode-map "M-RET")
-  (keymap-unset gptel-inline--response-overlay-mode-map "M-<return>")
-  (keymap-set gptel-inline--response-overlay-mode-map
-              "C-c C-o" #'gptel-inline--response-overlay-dispatch))
+(after! (agent-shell-inline evil)
+  (setq agent-shell-inline-key-bindings
+        '((agent-shell-inline-send . "SPC m s")
+          (agent-shell-inline-cycle-reference . "SPC m c")
+          (agent-shell-inline-append . "SPC m a")
+          (agent-shell-inline-switch-buffer . "SPC m b")
+          (agent-shell-inline-visit-buffer . "SPC m v")
+          (agent-shell-inline-quit . "SPC m q")
+          (agent-shell-inline-help . "SPC m h")
+          (agent-shell-inline-navigate . "SPC a e n")
+          (agent-shell-inline--response-overlay-dispatch . "SPC a e o")
+          (agent-shell-inline-review . "SPC a e v")
+          (agent-shell-inline-copy-response . "SPC a e y")
+          (agent-shell-inline-clear-response-overlay . "SPC a e c")
+          (agent-shell-inline-interrupt . "SPC a e x")
+          (agent-shell-inline--response-overlay-down . "SPC a e j")
+          (agent-shell-inline--response-overlay-up . "SPC a e k")
+          (agent-shell-inline-next-message . "SPC a e J")
+          (agent-shell-inline-previous-message . "SPC a e K")
+          (agent-shell-inline--response-overlay-pagedown . "SPC a e D")
+          (agent-shell-inline--response-overlay-pageup . "SPC a e U")))
+  (evil-set-initial-state 'agent-shell-inline-prompt-mode 'insert)
+  (map! :map agent-shell-inline-prompt-mode-map
+        :n "RET" #'agent-shell-inline-send
+        :i "RET" #'newline
+        :localleader
+        :desc "Send prompt" "s" #'agent-shell-inline-send
+        :desc "Cycle reference" "c" #'agent-shell-inline-cycle-reference
+        :desc "Append without sending" "a" #'agent-shell-inline-append
+        :desc "Switch conversation" "b" #'agent-shell-inline-switch-buffer
+        :desc "Visit conversation" "v" #'agent-shell-inline-visit-buffer
+        :desc "Cancel prompt" "q" #'agent-shell-inline-quit
+        :desc "Help" "h" #'agent-shell-inline-help))
 
-(after! (gptel-context evil)
-  (evil-set-initial-state 'gptel-context-buffer-mode 'normal)
-  (evil-define-key 'normal gptel-context-buffer-mode-map
-    (kbd "j") #'gptel-context-next
-    (kbd "k") #'gptel-context-previous
-    (kbd "RET") #'gptel-context-visit
-    (kbd "d") #'gptel-context-flag-deletion
-    (kbd "q") #'gptel-context-quit))
+(after! (agent-shell evil)
+  (evil-set-initial-state 'agent-shell-mode 'normal)
+  (evil-set-initial-state 'agent-shell-viewport-view-mode 'normal)
+  (evil-set-initial-state 'agent-shell-viewport-edit-mode 'insert)
+  (evil-set-initial-state 'agent-shell-diff-mode 'normal)
 
-(after! (gptel-agent evil)
-  (defun josh/gptel-tool-preview-keys (overlay)
-    "Add normal-state navigation to a newly created tool preview OVERLAY."
-    ;; Overlay keymaps are not mode maps, so Evil's auxiliary maps do not apply.
-    (dolist (binding '(("j" . gptel-agent--next-overlay)
-                       ("k" . gptel-agent--previous-overlay)
-                       ("TAB" . gptel-agent--cycle-overlay)
-                       ("<tab>" . gptel-agent--cycle-overlay)))
-      (define-key (overlay-get overlay 'keymap) (kbd (car binding))
-                  `(menu-item "" ,(cdr binding)
-                              :filter ,(lambda (command)
-                                         (and (evil-normal-state-p) command)))))
-    overlay)
-  (advice-add 'gptel-agent--confirm-overlay :filter-return
-              #'josh/gptel-tool-preview-keys))
+  (map! :map (agent-shell-mode-map agent-shell-viewport-view-mode-map
+             agent-shell-viewport-edit-mode-map)
+        :n "RET" #'josh/agent-shell-return
+        :localleader
+        :desc "All agent commands" "?" #'josh/agent-shell-command
+        :desc "Other agent buffer" "o" #'agent-shell-other-buffer)
+
+  (map! :map (agent-shell-mode-map agent-shell-viewport-view-mode-map)
+        :n "z a" #'agent-shell-ui-toggle-fragment
+        :n "z m" #'agent-shell-ui-toggle-all-fragments
+        :localleader
+        (:prefix ("f" . "fold")
+         :desc "Toggle block" "f" #'agent-shell-ui-toggle-fragment
+         :desc "Toggle all blocks" "a" #'agent-shell-ui-toggle-all-fragments)
+        (:prefix ("y" . "copy")
+         :desc "Region as Markdown" "r" #'agent-shell-copy-as-markdown
+         :desc "Code block" "c" #'agent-shell-copy-source-block-at-point
+         :desc "Link URL" "l" #'agent-shell-copy-link-url-at-point))
+
+  (map! :map agent-shell-mode-map
+        :i "n" #'self-insert-command
+        :i "p" #'self-insert-command
+        :i "r" #'self-insert-command
+        :i "+" #'self-insert-command
+        :i "-" #'self-insert-command
+        :i "0" #'self-insert-command
+        :i "RET" #'newline
+        :n "] ]" #'agent-shell-next-item
+        :n "[ [" #'agent-shell-previous-item
+        :n "TAB" #'agent-shell-next-item
+        :n "<backtab>" #'agent-shell-previous-item
+        "C-c RET" #'agent-shell-submit
+        "C-c S-<return>" #'agent-shell-submit-override
+        :localleader
+        :desc "Upstream menu" "h" #'agent-shell-help-menu
+        :desc "Send / queue prompt" "s" #'agent-shell-submit
+        :desc "Override busy submission" "S" #'agent-shell-submit-override
+        :desc "Interrupt / reject pending" "x" #'agent-shell-interrupt
+        :desc "Compose prompt" "c" #'agent-shell-prompt-compose
+        :desc "Quote selection" "r" #'agent-shell-quote-region
+        (:prefix ("m" . "session settings")
+         :desc "Mode" "m" #'agent-shell-set-session-mode
+         :desc "Cycle mode" "c" #'agent-shell-cycle-session-mode
+         :desc "Model" "v" #'agent-shell-set-session-model
+         :desc "Thought level" "t" #'agent-shell-set-session-thought-level
+         :desc "Other ACP option" "o" #'agent-shell-set-session-config-option)
+        (:prefix ("p" . "permissions and questions")
+         :desc "Latest permission" "p" #'agent-shell-jump-to-latest-permission-button-row
+         :desc "Next permission button" "j" #'agent-shell-next-permission-button
+         :desc "Previous permission button" "k" #'agent-shell-previous-permission-button
+         :desc "Activate button" "RET" #'josh/agent-shell-return
+         :desc "Latest question form" "q" #'agent-shell-elicitation-jump-to-latest-form
+         :desc "Next question field" "n" #'agent-shell-elicitation-next-field
+         :desc "Previous question field" "b" #'agent-shell-elicitation-previous-field
+         :desc "Question preview" "v" #'agent-shell-elicitation-toggle-preview)
+        (:prefix ("q" . "prompt queue")
+         :desc "Queue prompt" "q" #'agent-shell-prompt-queue
+         :desc "Remove queued prompt" "d" #'agent-shell-prompt-queue-remove
+         :desc "Resume queue" "r" #'agent-shell-prompt-queue-resume
+         :desc "Steer current turn" "s" #'agent-shell-prompt-steer)
+        (:prefix ("i" . "insert")
+         :desc "File" "f" #'agent-shell-insert-file
+         :desc "Clipboard / image" "p" #'agent-shell-yank-dwim
+         :desc "Shell command output" "!" #'agent-shell-insert-shell-command-output
+         :desc "Text drawing" "d" #'agent-shell-artist-insert-text-drawing)
+        (:prefix ("b" . "session")
+         :desc "Reload same session" "r" #'agent-shell-reload
+         :desc "Restart conversation" "R" #'agent-shell-restart
+         :desc "Fork session" "f" #'agent-shell-fork
+         :desc "Copy session ID" "y" #'agent-shell-copy-session-id
+         :desc "Open transcript" "t" #'agent-shell-open-transcript
+         :desc "Show usage" "u" #'agent-shell-show-usage
+         :desc "Toggle chat labels" "c" #'agent-shell-chat-mode)
+        (:prefix ("l" . "logs")
+         :desc "ACP logs" "a" #'agent-shell-view-acp-logs
+         :desc "Traffic" "t" #'agent-shell-view-traffic
+         :desc "Save traffic" "s" #'agent-shell-save-traffic
+         :desc "Toggle logging" "l" #'agent-shell-toggle-logging
+         :desc "Reset logs" "r" #'agent-shell-reset-logs)
+        (:prefix ("y" . "copy")
+         :desc "Last response" "y" #'agent-shell-copy-last-output)
+        (:prefix ("z" . "image size")
+         :desc "Increase" "+" #'agent-shell-image-scale-increase
+         :desc "Decrease" "-" #'agent-shell-image-scale-decrease
+         :desc "Reset" "0" #'agent-shell-image-scale-reset))
+
+  (map! :map (agent-shell-viewport-view-mode-map agent-shell-viewport-edit-mode-map)
+        :localleader
+        (:prefix ("m" . "session settings")
+         :desc "Mode" "m" #'agent-shell-viewport-set-session-mode
+         :desc "Cycle mode" "c" #'agent-shell-viewport-cycle-session-mode
+         :desc "Model" "v" #'agent-shell-viewport-set-session-model
+         :desc "Thought level" "t" #'agent-shell-viewport-set-session-thought-level)
+        (:prefix ("q" . "prompt queue")
+         :desc "Queue prompt" "q" #'agent-shell-viewport-prompt-queue
+         :desc "Remove queued prompt" "d" #'agent-shell-viewport-prompt-queue-remove
+         :desc "Resume queue" "r" #'agent-shell-viewport-prompt-queue-resume)
+        (:prefix ("b" . "session")
+         :desc "Copy session ID" "y" #'agent-shell-viewport-copy-session-id
+         :desc "Open transcript" "t" #'agent-shell-viewport-open-transcript)
+        (:prefix ("l" . "logs")
+         :desc "ACP logs" "a" #'agent-shell-viewport-view-acp-logs
+         :desc "Traffic" "t" #'agent-shell-viewport-view-traffic
+         :desc "Save traffic" "s" #'agent-shell-viewport-save-traffic))
+
+  (map! :map agent-shell-viewport-view-mode-map
+        :n "] ]" #'agent-shell-viewport-next-item
+        :n "[ [" #'agent-shell-viewport-previous-item
+        :n "] p" #'agent-shell-viewport-next-page
+        :n "[ p" #'agent-shell-viewport-previous-page
+        :n "TAB" #'agent-shell-viewport-next-item
+        :n "<backtab>" #'agent-shell-viewport-previous-item
+        :n "q" #'bury-buffer
+        :localleader
+        :desc "Upstream viewport menu" "h" #'agent-shell-viewport-help-menu
+        :desc "Reply" "r" #'agent-shell-viewport-reply
+        :desc "Quote and reply" "R" #'agent-shell-viewport-quote-reply
+        :desc "Interrupt / reject pending" "x" #'agent-shell-viewport-interrupt
+        :desc "Refresh viewport" "g" #'agent-shell-viewport-refresh
+        :desc "Next interaction" "j" #'agent-shell-viewport-next-page
+        :desc "Previous interaction" "k" #'agent-shell-viewport-previous-page
+        (:prefix ("z" . "image size")
+         :desc "Increase" "+" #'agent-shell-markdown-image-scale-increase
+         :desc "Decrease" "-" #'agent-shell-markdown-image-scale-decrease
+         :desc "Reset" "0" #'agent-shell-markdown-image-scale-reset))
+
+  (map! :map agent-shell-viewport-edit-mode-map
+        "C-c RET" #'agent-shell-viewport-compose-send
+        "C-c S-<return>" #'agent-shell-viewport-compose-send-override
+        :localleader
+        :desc "Compose help" "h" #'agent-shell-viewport-compose-help-menu
+        :desc "Send / queue prompt" "s" #'agent-shell-viewport-compose-send
+        :desc "Override busy submission" "S" #'agent-shell-viewport-compose-send-override
+        :desc "Send and show response" "v" #'agent-shell-viewport-compose-send-and-wait-for-response
+        :desc "Send and dismiss" "d" #'agent-shell-viewport-compose-send-and-dismiss
+        :desc "Cancel composition" "k" #'agent-shell-viewport-compose-cancel
+        :desc "Peek at last interaction" "p" #'agent-shell-viewport-compose-peek-last
+        (:prefix ("H" . "prompt history")
+         :desc "Search" "s" #'agent-shell-viewport-search-history
+         :desc "Previous" "k" #'agent-shell-viewport-previous-history
+         :desc "Next" "j" #'agent-shell-viewport-next-history))
+
+  (map! :map agent-shell-diff-mode-map
+        :n "] c" #'diff-hunk-next
+        :n "[ c" #'diff-hunk-prev
+        :n "RET" #'agent-shell-diff-open-file
+        :n "q" #'kill-current-buffer
+        :localleader
+        :desc "Accept changes" "a" #'agent-shell-diff-accept-all
+        :desc "Reject changes" "r" #'agent-shell-diff-reject-all
+        :desc "Visit file" "o" #'agent-shell-diff-open-file
+        :desc "Close review" "q" #'kill-current-buffer)
+
+  (map! :map agent-shell-artist-mode-map
+        :localleader
+        :desc "Insert drawing" "s" #'agent-shell-artist-commit
+        :desc "Cancel drawing" "k" #'agent-shell-artist-cancel
+        :desc "Drawing tools" "h" #'agent-shell-artist-help
+        :desc "Previous drawing" "p" #'agent-shell-artist-previous-history
+        :desc "Next drawing" "n" #'agent-shell-artist-next-history))

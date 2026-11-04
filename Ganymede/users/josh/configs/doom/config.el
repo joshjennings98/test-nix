@@ -10,92 +10,21 @@
 (setq custom-file (expand-file-name "custom.el" doom-state-dir))
 (load custom-file 'noerror 'nomessage)
 
+(after! ispell
+  (setq ispell-program-name "aspell"
+        ispell-dictionary "en_GB"
+        ispell-alternate-dictionary (expand-file-name "english-words" doom-user-dir)))
+
 (load! "keys")
+(load! "agent-shell-inline")
 
-(use-package! gptel
-  :config
-  (require 'gptel-openai-oauth)
-
-  (setq gptel-openai-oauth-login-method 'authorization-code
-        gptel--openai-oauth-token-file
-        (expand-file-name "gptel-openai-oauth-token" doom-state-dir)
-        gptel-model (intern (or (getenv "EMACS_BROKER_MODEL") "gpt-5.6-sol"))
-        gptel-backend
-        (if (getenv "EMACS_BROKER_URL")
-            (gptel-make-openai-responses
-             "Responses (broker)" :models (list gptel-model) :stream t
-             :protocol "http" :host "127.0.0.1:8123"
-             :endpoint "/openai/responses" :header nil :key nil)
-          (gptel-make-openai-oauth
-           "OpenAI subscription" :models '(gpt-5.6-sol)))
-        gptel-log-level nil
-        gptel-confirm-tool-calls 'auto))
-
-(defun josh/gptel-agent-tool-path (tool-call)
-  "Return the filesystem path targeted by TOOL-CALL, when it has one."
-  (let ((name (plist-get tool-call :name))
-        (args (plist-get tool-call :args)))
-    (pcase name
-      ("Read" (plist-get args :file_path))
-      ((or "Glob" "Grep" "Edit" "Insert") (plist-get args :path))
-      ("Write" (expand-file-name (plist-get args :filename)
-                                 (or (plist-get args :path) default-directory)))
-      ("Mkdir" (expand-file-name (plist-get args :name)
-                                 (or (plist-get args :parent) default-directory))))))
-
-(defun josh/gptel-confirm-outside-project (tool-call)
-  "Require confirmation when TOOL-CALL targets outside the active project."
-  (when-let ((path (josh/gptel-agent-tool-path tool-call)))
-    (let* ((project (project-current nil default-directory))
-           (project-directory (if project
-                                  (project-root project)
-                                default-directory))
-           (target (expand-file-name path default-directory)))
-      (unless (or (string-equal (directory-file-name target)
-                                (directory-file-name project-directory))
-                (file-in-directory-p target project-directory))
-        '(:confirm t)))))
-
-(after! gptel
-  (add-hook 'gptel-pre-tool-call-functions #'josh/gptel-confirm-outside-project))
-
-(use-package! gptel-agent
-  :after gptel
-  :config
-  (when-let ((broker (getenv "EMACS_BROKER_URL")))
-    (require 'eww)
-    (setq eww-search-prefix (concat broker "/search?q="))
-    (advice-add 'gptel-agent--read-url :filter-args
-                (lambda (args)
-                  (list (car args)
-                        (concat broker "/page?url=" (url-hexify-string (cadr args)))))))
-  (gptel-agent-update))
-
-(use-package! gptel-inline
-  :commands gptel-inline
-  :config
-  (defun josh/gptel-project-chat (buffer)
-    "Reuse the project chat or start a planning session for BUFFER."
-    (with-current-buffer buffer
-      (let* ((details (or (gptel-inline-project-buffer buffer)
-                          (format "*gptel:%s*" default-directory)))
-             (directory (if (consp details) (cadr details) default-directory))
-             (name (if (consp details)
-                       (generate-new-buffer-name (car details))
-                     details)))
-        (unless (get-buffer name)
-          (require 'gptel-agent)
-          (with-current-buffer (gptel name)
-            (setq default-directory directory)
-            (gptel-agent-update)
-            (gptel-preset 'gptel-plan
-                          (lambda (symbol value)
-                            (set (make-local-variable symbol) value)))))
-        name)))
-
-  (setq gptel-inline-find-chat-buffer-functions
-        '(gptel-inline-previous-buffer gptel-inline-same-buffer
-          josh/gptel-project-chat)))
+(use-package! agent-shell
+  :commands (agent-shell agent-shell-new-shell agent-shell-toggle
+             agent-shell-switch-buffer agent-shell-resume-session
+             agent-shell-prompt-compose agent-shell-viewport-view-last
+             agent-shell-send-region agent-shell-send-dwim agent-shell-send-file
+             agent-shell-send-other-file agent-shell-send-clipboard-image
+             agent-shell-send-screenshot agent-shell-new-worktree-shell))
 
 (after! eglot
   (setq-default eglot-workspace-configuration

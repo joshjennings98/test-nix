@@ -1,5 +1,9 @@
 ;;; init.el -*- lexical-binding: t; -*-
 
+;; Register before Doom initialises Evil Collection; keys.el owns these bindings.
+(with-eval-after-load 'evil-collection
+  (setq evil-collection-mode-list (delq 'agent-shell evil-collection-mode-list)))
+
 (doom! :input
        :completion
        (corfu +orderless)
@@ -46,7 +50,6 @@
        editorconfig
        eval
        lookup
-       llm
        (lsp +eglot)
        magit
        make

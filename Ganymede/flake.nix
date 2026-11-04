@@ -37,9 +37,6 @@
   } @ inputs: let
     inherit (self) outputs;
   in {
-    packages.x86_64-linux.emacs-broker =
-      self.nixosConfigurations.Ganymede.pkgs.callPackage ./users/josh/configs/doom/broker { };
-
     # Reload with 'nixos-rebuild --flake .#Ganymede'
     nixosConfigurations = {
       Ganymede = nixpkgs.lib.nixosSystem {
