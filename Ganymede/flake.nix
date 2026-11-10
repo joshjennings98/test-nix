@@ -18,7 +18,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.doomdir.url = "./users/josh/configs/doom";
     };
-
     impermanence.url = "github:nix-community/impermanence";
 
     disko = {
@@ -29,23 +28,24 @@
     nix-gaming.url = "github:fufexan/nix-gaming";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    home-manager,
-    ...
-  } @ inputs: let
-    inherit (self) outputs;
-  in {
-    # Reload with 'nixos-rebuild --flake .#Ganymede'
-    nixosConfigurations = {
-      Ganymede = nixpkgs.lib.nixosSystem {
-        specialArgs = { inherit inputs outputs; };
-        modules = [
-          ./nixos/configuration.nix
-        ];
-      }; 
+  outputs =
+    { self
+    , nixpkgs
+    , home-manager
+    , ...
+    } @ inputs:
+    let
+      inherit (self) outputs;
+    in
+    {
+      # Reload with 'nixos-rebuild --flake .#Ganymede'
+      nixosConfigurations = {
+        Ganymede = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs outputs; };
+          modules = [
+            ./nixos/configuration.nix
+          ];
+        };
+      };
     };
-  };
 }
-
