@@ -47,6 +47,7 @@
       home.file.".agents/skills".source = ../ai/skills;
 
       home.persistence."/persist".directories = [
+        ".cache/agent-shell"
         ".cache/doom"
         ".local/share/doom"
         ".local/share/nix-doom"
@@ -60,7 +61,9 @@
           '';
 
       programs.doom-emacs = {
+        # The :term ghostel module uses Nix's Ghostel build, including its native module.
         enable = true;
+        experimentalFetchTree = true;
         doomDir = doomConfig;
         doomLocalDir = "${config.xdg.dataHome}/nix-doom";
         emacs = emacsPackage;
@@ -74,10 +77,13 @@
           aspell
           pkgs.codex-acp
           pkgs.fd
+          pkgs.findutils
+          pkgs.gawk
           pkgs.git
           pkgs.go
           pkgs.gopls
           pkgs.ripgrep
+          pkgs.socat
         ];
       };
     };

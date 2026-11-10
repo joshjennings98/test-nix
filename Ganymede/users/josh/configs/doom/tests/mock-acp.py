@@ -35,7 +35,19 @@ for line in sys.stdin:
     elif method == "session/prompt":
         pending = identifier
         prompt = "".join(item.get("text", "") for item in message["params"]["prompt"])
-        if "TEST_BLOCKS" in prompt:
+        if "TEST_HISTORY" in prompt:
+            chunk("## Result\n\n**Checking** files.", message_id="intro")
+            chunk("Private reasoning", kind="agent_thought_chunk")
+            send({"method": "session/update", "params": {
+                "sessionId": "inline-test", "update": {
+                    "sessionUpdate": "tool_call", "toolCallId": "history-tool",
+                    "title": "Synthetic history tool", "kind": "read", "status": "completed",
+                    "content": [{"type": "content", "content": {
+                        "type": "text", "text": "Tool output must stay out"}}]}}})
+            chunk("Done with `example.el`.", message_id="answer")
+            reply(identifier, {"stopReason": "end_turn"})
+            pending = None
+        elif "TEST_BLOCKS" in prompt:
             chunk("Checking ")
             chunk("files.")
             chunk("Considering the result", kind="agent_thought_chunk")

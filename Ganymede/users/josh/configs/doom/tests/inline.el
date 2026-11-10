@@ -159,6 +159,36 @@
           (agent-shell-inline-clear-response-overlay overlay)
           (should-not (buffer-live-p history)))))))
 
+(ert-deftest josh/inline-reopened-history-preserves-message-rendering ()
+  (josh/with-inline-agent
+    (let* ((first (agent-shell-inline-message "TEST_HISTORY" shell))
+           (preview (plist-get (overlay-get first 'agent-shell-inline) :src))
+           live-text live-face)
+      (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get first 'agent-shell-inline-status))))
+      (with-current-buffer preview
+        (font-lock-ensure)
+        (setq live-text (buffer-substring-no-properties (point-min) (point-max))
+              live-face (get-text-property 4 'face))
+        (should live-face))
+      (should (equal live-text "## Result\n\n**Checking** files.\n\nDone with `example.el`."))
+      (should (with-current-buffer shell (string-match-p "Synthetic history tool" (buffer-string))))
+      (agent-shell-inline-clear-response-overlay first)
+      (should-not (buffer-live-p preview))
+      (let ((overlay (agent-shell-inline-message "second" shell)))
+        (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status))))
+        (agent-shell-inline-previous-message overlay)
+        (with-current-buffer (overlay-get overlay 'agent-shell-inline-history-source)
+          (should (derived-mode-p 'gfm-mode))
+          (should markdown-hide-markup)
+          (should (equal (buffer-substring-no-properties (point-min) (point-max)) live-text))
+          (should (equal (get-text-property 4 'face) live-face)))
+        (agent-shell-inline-copy-response)
+        (should (equal (current-kill 0) live-text))))))
+
+(ert-deftest josh/inline-untyped-history-does-not-leak-tool-output ()
+  (should (string-prefix-p "No agent message text is available"
+                           (agent-shell-inline--history-response "Unclassified tool output"))))
+
 (ert-deftest josh/inline-history-does-not-overwrite-live-stream ()
   (josh/with-inline-agent
     (let ((first (agent-shell-inline-message "first" shell)))
@@ -179,7 +209,8 @@
 (ert-deftest josh/inline-wraps-without-changing-source-or-copy ()
   (josh/with-inline-agent
     (setq-local truncate-lines t)
-    (let* ((text (mapconcat #'identity (make-list 60 "wrapping") " "))
+    (let* ((agent-shell-inline-response-overlay-height 8)
+           (text (mapconcat #'identity (make-list 60 "wrapping") " "))
            (overlay (agent-shell-inline-message text shell))
            (preview (plist-get (overlay-get overlay 'agent-shell-inline) :src)))
       (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status))))

@@ -5,6 +5,15 @@
 (package! doom-themes :pin "a59202912ad55014e53a685eee6cd94130bdd4fd")
 (package! evil-textobj-tree-sitter)
 (package! expreg)
+(package! org-fc
+  :recipe (:host github :repo "l3kn/org-fc"
+           :files (:defaults "awk" "demo.org" "docs"
+                   (:exclude "org-fc-hydra.el")))
+  :pin "fce1cb265445f9c08ecb6b524562115eba9ab7a6")
+(package! mcp-server
+  :recipe (:host github :repo "rhblind/emacs-mcp-server"
+           :files ("*.el" "tools/*.el"))
+  :pin "a5d749cf9880598f66308545985526fd4460627f")
 (package! shell-maker
   :recipe (:host github :repo "xenodium/shell-maker")
   :pin "b28ee61a2533e408ed180662f83bb84fc8f84ba6")

@@ -31,6 +31,23 @@ in
   
     programs.feh.enable = true;
 
+    services.dunst = {
+      enable = true;
+      settings = {
+        global = {
+          font = "Iosevka 12";
+          follow = "keyboard";
+          origin = "top-right";
+          offset = "12x40";
+        };
+        agent_shell = {
+          appname = "Agent Shell";
+          timeout = 0;
+          mouse_left_click = "do_action, close_current";
+        };
+      };
+    };
+
     # todo: work out why 'services.screen-locker' doesn't work
     # services.screen-locker = {
     #   enable = true;

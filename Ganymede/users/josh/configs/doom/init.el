@@ -40,6 +40,7 @@
 
        :term
        eshell
+       ghostel
        vterm
 
        :checkers

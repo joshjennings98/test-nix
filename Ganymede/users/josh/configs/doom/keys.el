@@ -1,5 +1,58 @@
 ;;; keys.el -*- lexical-binding: t; -*-
 
+(when (keymapp (lookup-key doom-leader-map (kbd "f")))
+  (define-key doom-leader-map (kbd "F") (lookup-key doom-leader-map (kbd "f"))))
+(when (commandp (lookup-key doom-leader-map (kbd "SPC")))
+  (define-key doom-leader-map (kbd "f") (lookup-key doom-leader-map (kbd "SPC"))))
+(define-key doom-leader-map (kbd "SPC") nil)
+
+(map! :leader
+      :desc "Review all flashcards" "r" #'org-fc-review-all
+      :desc "Edit flashcards" "R" #'josh/org-fc-edit)
+
+(after! org
+  (map! :map org-mode-map
+        :localleader
+        :desc "Flashcards" "F" #'org-fc-transient))
+
+(after! (org-fc evil)
+  ;; The bundled demo still documents n as the flip key.
+  (define-key org-fc-review-flip-mode-map (kbd "n") #'org-fc-review-flip)
+  (evil-make-overriding-map org-fc-review-flip-mode-map)
+  (evil-make-overriding-map org-fc-review-rate-mode-map)
+  (add-hook 'org-fc-review-flip-mode-hook #'evil-normalize-keymaps)
+  (add-hook 'org-fc-review-rate-mode-hook #'evil-normalize-keymaps))
+
+(when (keymapp (lookup-key doom-leader-map (kbd "b")))
+  (let ((picker (lookup-key doom-leader-map (kbd "b b"))))
+    (define-key doom-leader-map (kbd "B") (lookup-key doom-leader-map (kbd "b")))
+    (define-key doom-leader-map (kbd "b") picker)))
+
+(when (keymapp (lookup-key doom-leader-map (kbd "p")))
+  (let ((picker (lookup-key doom-leader-map (kbd "p p"))))
+    (define-key doom-leader-map (kbd "P") (lookup-key doom-leader-map (kbd "p")))
+    (define-key doom-leader-map (kbd "p") picker)))
+
+(define-key doom-leader-map (kbd "T") (make-sparse-keymap))
+(map! :leader
+      (:prefix ("T" . "terminal")
+       :desc "New terminal" "n" #'+ghostel/here
+       :desc "New terminal in split" "s" #'josh/ghostel-split))
+
+(after! which-key
+  (setq which-key-idle-delay 0.01
+        which-key-idle-secondary-delay 0.01)
+  (when which-key-mode
+    (which-key-mode -1)
+    (which-key-mode 1))
+  (which-key-add-keymap-based-replacements doom-leader-map
+    "f" "Find file in project"
+    "F" "file"
+    "b" "Switch buffer"
+    "B" "buffer"
+    "p" "Switch project"
+    "P" "project"))
+
 (defun josh/agent-shell-command ()
   "Choose any public Agent Shell command with Doom's completion interface."
   (interactive)
@@ -26,67 +79,68 @@
       (call-interactively #'agent-shell-viewport-compose-send))
      (t (user-error "No agent action at point")))))
 
+(define-key doom-leader-map (kbd "a") (make-sparse-keymap))
+
 (map! :leader
       (:prefix ("a" . "agent")
        :desc "Open agent shell" "a" #'agent-shell
-       :desc "New agent shell" "n" #'agent-shell-new-shell
        :desc "Toggle agent shell" "t" #'agent-shell-toggle
        :desc "Switch agent shell" "b" #'agent-shell-switch-buffer
-       :desc "Resume session" "R" #'agent-shell-resume-session
-       :desc "Compose prompt" "c" #'agent-shell-prompt-compose
-       :desc "View last interaction" "v" #'agent-shell-viewport-view-last
-       :desc "Send region" "r" #'agent-shell-send-region
-       :desc "Send region or diagnostic" "d" #'agent-shell-send-dwim
+       :desc "Reply inline" "r" #'agent-shell-inline-reply
+       :desc "Send region" "S" #'agent-shell-send-region
        :desc "Send current file" "f" #'agent-shell-send-file
-       :desc "Send another file" "F" #'agent-shell-send-other-file
-       :desc "Send clipboard image" "i" #'agent-shell-send-clipboard-image
-       :desc "Send screenshot" "s" #'agent-shell-send-screenshot
-       :desc "New worktree shell" "w" #'agent-shell-new-worktree-shell
        :desc "Discuss inline" "p" #'agent-shell-inline
+       :desc "Visit / cycle inline previews" "P" #'agent-shell-inline-visit
        :desc "Message without switching" "m" #'agent-shell-inline-message
-       (:prefix ("e" . "inline response")
-        :desc "Navigate preview" "n" #'agent-shell-inline-navigate
-        :desc "Actions" "o" #'agent-shell-inline--response-overlay-dispatch
-        :desc "Visit / review conversation" "v" #'agent-shell-inline-review
-        :desc "Copy full response" "y" #'agent-shell-inline-copy-response
-        :desc "Clear preview" "c" #'agent-shell-inline-clear-response-overlay
-        :desc "Interrupt agent" "x" #'agent-shell-inline-interrupt
-        :desc "Scroll down" "j" #'agent-shell-inline--response-overlay-down
-        :desc "Scroll up" "k" #'agent-shell-inline--response-overlay-up
-        :desc "Next reply" "J" #'agent-shell-inline-next-message
-        :desc "Previous reply" "K" #'agent-shell-inline-previous-message
-        :desc "Page down" "D" #'agent-shell-inline--response-overlay-pagedown
-        :desc "Page up" "U" #'agent-shell-inline--response-overlay-pageup)
+       :desc "Navigate preview" "n" #'agent-shell-inline-navigate
+       :desc "Response actions" "o" #'agent-shell-inline--response-overlay-dispatch
+       :desc "Visit / review conversation" "v" #'agent-shell-inline-review
+       :desc "Interrupt agent" "x" #'agent-shell-inline-interrupt
+       :desc "Scroll response down" "j" #'agent-shell-inline--response-overlay-down
+       :desc "Scroll response up" "k" #'agent-shell-inline--response-overlay-up
+       :desc "Page response down" "D" #'agent-shell-inline--response-overlay-pagedown
+       :desc "Page response up" "U" #'agent-shell-inline--response-overlay-pageup
+       (:prefix ("i" . "inputs")
+        :desc "Send another file" "f" #'agent-shell-send-other-file
+        :desc "Send clipboard image" "i" #'agent-shell-send-clipboard-image
+        :desc "Send screenshot" "s" #'agent-shell-send-screenshot
+        :desc "Send region or diagnostic" "d" #'agent-shell-send-dwim)
+       (:prefix ("N" . "new / resume agent")
+        :desc "New agent shell" "n" #'agent-shell-new-shell
+        :desc "Resume session" "r" #'agent-shell-resume-session
+        :desc "New worktree shell" "w" #'agent-shell-new-worktree-shell)
        :desc "All agent commands" "?" #'josh/agent-shell-command))
 
 (after! (agent-shell-inline evil)
+  (define-key agent-shell-inline-prompt-mode-map [remap evil-save-and-close]
+              #'agent-shell-inline-write-and-quit)
+  (define-key agent-shell-inline-prompt-mode-map [remap evil-quit]
+              #'agent-shell-inline-quit)
   (setq agent-shell-inline-key-bindings
-        '((agent-shell-inline-send . "SPC m s")
-          (agent-shell-inline-cycle-reference . "SPC m c")
+        '((agent-shell-inline-send . ":wq")
+          (agent-shell-inline-cycle-reference . "SPC m m")
           (agent-shell-inline-append . "SPC m a")
           (agent-shell-inline-switch-buffer . "SPC m b")
           (agent-shell-inline-visit-buffer . "SPC m v")
-          (agent-shell-inline-quit . "SPC m q")
+          (agent-shell-inline-quit . ":q")
           (agent-shell-inline-help . "SPC m h")
-          (agent-shell-inline-navigate . "SPC a e n")
-          (agent-shell-inline--response-overlay-dispatch . "SPC a e o")
-          (agent-shell-inline-review . "SPC a e v")
-          (agent-shell-inline-copy-response . "SPC a e y")
-          (agent-shell-inline-clear-response-overlay . "SPC a e c")
-          (agent-shell-inline-interrupt . "SPC a e x")
-          (agent-shell-inline--response-overlay-down . "SPC a e j")
-          (agent-shell-inline--response-overlay-up . "SPC a e k")
-          (agent-shell-inline-next-message . "SPC a e J")
-          (agent-shell-inline-previous-message . "SPC a e K")
-          (agent-shell-inline--response-overlay-pagedown . "SPC a e D")
-          (agent-shell-inline--response-overlay-pageup . "SPC a e U")))
+          (agent-shell-inline-reply . "SPC a r")
+          (agent-shell-inline-navigate . "SPC a n")
+          (agent-shell-inline--response-overlay-dispatch . "SPC a o")
+          (agent-shell-inline-review . "SPC a v")
+          (agent-shell-inline-interrupt . "SPC a x")
+          (agent-shell-inline--response-overlay-down . "SPC a j")
+          (agent-shell-inline--response-overlay-up . "SPC a k")
+          (agent-shell-inline--response-overlay-pagedown . "SPC a D")
+          (agent-shell-inline--response-overlay-pageup . "SPC a U")))
   (evil-set-initial-state 'agent-shell-inline-prompt-mode 'insert)
   (map! :map agent-shell-inline-prompt-mode-map
         :n "RET" #'agent-shell-inline-send
         :i "RET" #'newline
         :localleader
-        :desc "Send prompt" "s" #'agent-shell-inline-send
-        :desc "Cycle reference" "c" #'agent-shell-inline-cycle-reference
+        "s" nil
+        "c" nil
+        :desc "Cycle reference" "m" #'agent-shell-inline-cycle-reference
         :desc "Append without sending" "a" #'agent-shell-inline-append
         :desc "Switch conversation" "b" #'agent-shell-inline-switch-buffer
         :desc "Visit conversation" "v" #'agent-shell-inline-visit-buffer

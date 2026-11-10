@@ -10,6 +10,10 @@
 (setq custom-file (expand-file-name "custom.el" doom-state-dir))
 (load custom-file 'noerror 'nomessage)
 
+(after! projectile
+  (add-to-list 'projectile-project-search-path (expand-file-name "~/Documents/"))
+  (setq projectile-auto-discover t))
+
 (after! ispell
   (setq ispell-program-name "aspell"
         ispell-dictionary "en_GB"
@@ -17,6 +21,36 @@
 
 (load! "keys")
 (load! "agent-shell-inline")
+(load! "agent-shell-completion-notify")
+(load! "agent-shell-navigation")
+
+(use-package! org-fc
+  :commands (org-fc-review-all)
+  :after org
+  :demand t
+  :config
+  (setq org-fc-directories (list org-directory)
+        org-fc-review-history-file (expand-file-name "org-fc-reviews.tsv" doom-state-dir))
+  (require 'org-fc-transient))
+
+(defun josh/org-fc-edit ()
+  "Choose an Org file to edit or create in the flashcard directory."
+  (interactive)
+  (find-file
+   (read-file-name "Flashcards file: " org-directory nil nil nil
+                   (lambda (file)
+                     (or (file-directory-p file)
+                         (string-match-p "\\.org\\'" file))))))
+
+(after! ghostel
+  (setq ghostel-bold-color 'bright
+        ghostel-module-auto-install nil))
+
+(defun josh/ghostel-split ()
+  "Open a new Ghostel terminal in a split below the current window."
+  (interactive)
+  (select-window (split-window-below))
+  (+ghostel/here))
 
 (use-package! agent-shell
   :commands (agent-shell agent-shell-new-shell agent-shell-toggle
@@ -24,7 +58,15 @@
              agent-shell-prompt-compose agent-shell-viewport-view-last
              agent-shell-send-region agent-shell-send-dwim agent-shell-send-file
              agent-shell-send-other-file agent-shell-send-clipboard-image
-             agent-shell-send-screenshot agent-shell-new-worktree-shell))
+             agent-shell-send-screenshot agent-shell-new-worktree-shell)
+  :config
+  (setq agent-shell-preferred-agent-config 'codex)
+  (add-to-list 'agent-shell-mcp-servers
+               '((name . "emacs-navigation")
+                 (command . (lambda () (or (executable-find "socat")
+                                          (error "socat is not installed"))))
+                 (args . (lambda () (agent-shell-navigation-connect)))
+                 (env . []))))
 
 (after! eglot
   (setq-default eglot-workspace-configuration

@@ -40,7 +40,7 @@
 
   # Settings for NixOS
   nix.settings = {
-    experimental-features = "nix-command flakes"; # Enable flakes and new 'nix' command
+    experimental-features = ["nix-command" "flakes"]; # Enable flakes and new 'nix' command
     auto-optimise-store = true; # Deduplicate and optimize nix store
   };
 

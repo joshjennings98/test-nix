@@ -27,6 +27,7 @@ in
     username = "josh";
     homeDirectory = "/home/josh";
     pointerCursor = {
+      enable = true;
       package = pkgs.adwaita-icon-theme;
       name = "Adwaita";
       size = 16;
@@ -55,6 +56,7 @@ in
       ".cache/mesa_shader_cache"
       ".config/spotify"
       ".config/gh"
+      ".codex"
     ];
     files = [
       ".screenrc"
@@ -90,7 +92,7 @@ in
     jq
     kak-tree-sitter
     keepassxc
-    lxappearance-gtk2
+    lxappearance
     nil
     obsidian
     pagefind # TODO: move to dev flake in website

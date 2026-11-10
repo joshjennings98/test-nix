@@ -8,6 +8,9 @@
 (load (expand-file-name "../configs/doom/tests/keys.el"
                         (file-name-directory load-file-name)) nil t)
 
+(load (expand-file-name "../configs/doom/tests/org-fc.el"
+                        (file-name-directory load-file-name)) nil t)
+
 (defvar josh/test-project (make-temp-file "doom-go-" t))
 (defvar josh/test-buffer nil)
 
@@ -34,8 +37,10 @@
                     (overlays-in (point-min) (point-max))))
   (require 'agent-shell)
   (should (eq (key-binding (kbd "SPC a a")) 'agent-shell))
-  (should (eq (key-binding (kbd "SPC a n")) 'agent-shell-new-shell))
-  (should (eq (key-binding (kbd "SPC a r")) 'agent-shell-send-region))
+  (should (eq (key-binding (kbd "SPC a N n")) 'agent-shell-new-shell))
+  (should (eq (key-binding (kbd "SPC a n")) 'agent-shell-inline-navigate))
+  (should (eq (key-binding (kbd "SPC a r")) 'agent-shell-inline-reply))
+  (should (eq (key-binding (kbd "SPC a S")) 'agent-shell-send-region))
   (should (executable-find "codex-acp"))
   (should (commandp (lookup-key evil-inner-text-objects-map "f")))
   (goto-char (point-max))
