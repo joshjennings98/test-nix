@@ -13,7 +13,12 @@
 (after! org
   (map! :map org-mode-map
         :localleader
-        :desc "Flashcards" "F" #'org-fc-transient))
+        :desc "Flashcards" "F" #'org-fc-transient
+        (:prefix ("D" . "design review")
+         :desc "Create review" "n" #'design-review-create
+         :desc "Validate document" "v" #'design-review-validate-document
+         :desc "Check block" "c" #'design-review-check-block
+         :desc "Check all / start reviews" "a" #'design-review-check-document)))
 
 (after! (org-fc evil)
   ;; The bundled demo still documents n as the flip key.

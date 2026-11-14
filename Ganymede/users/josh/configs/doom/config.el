@@ -24,6 +24,10 @@
 (agent-shell-permission-transient-mode 1)
 (load! "agent-shell-inline")
 (load! "agent-shell-completion-notify")
+(load! "design-review")
+(load! "design-review-execution")
+(load! "design-review-mcp")
+(load! "org-mermaid")
 (load! "agent-shell-navigation")
 
 (use-package! org-fc

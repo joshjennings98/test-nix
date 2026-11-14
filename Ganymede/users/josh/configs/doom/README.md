@@ -15,6 +15,10 @@ for prompts, settings, permissions, queues and review. `SPC a ?` searches all
 Agent Shell commands. In insert state, use `M-SPC` as the leader.
 See the [complete keyboard guide](docs/keys.md) for the shell, viewport,
 compose and diff-review bindings.
+The [Org design review guide](docs/design-review.org) covers validated MCP
+authoring, the separate `validate-document` tool, Babel checks, independent
+reviews and links into Magit diffs. Review tools share the existing Emacs MCP
+connection and are available to new Agent Shell sessions after rebuilding.
 Use `SPC a p` for an inline source discussion or `SPC a m` for a quick message
 without displaying the conversation. The separate
 [`agent-shell-inline.el`](agent-shell-inline.el) extension is adapted from

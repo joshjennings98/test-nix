@@ -72,7 +72,9 @@
 (defun agent-shell-navigation-connect ()
   "Start the local MCP server if needed and return its socat arguments."
   (require 'mcp-server)
-  (setq mcp-server-emacs-tools-enabled '(open_file switch_buffer list_buffers))
+  (require 'design-review-mcp)
+  (setq mcp-server-emacs-tools-enabled
+        (append '(open_file switch_buffer list_buffers) (design-review-register-tools)))
   (let ((position-properties
          '((line . ((type . "integer") (minimum . 1)
                     (description . "One-based line number to centre")))

@@ -35,7 +35,13 @@ for line in sys.stdin:
     elif method == "session/prompt":
         pending = identifier
         prompt = "".join(item.get("text", "") for item in message["params"]["prompt"])
-        if "TEST_HISTORY" in prompt:
+        if "REVIEW_JSON" in prompt:
+            chunk(json.dumps({"summary": "Fixture assessment", "findings": [
+                {"status": "REVIEW", "message": "Inspect the assertion", "file": "app.go", "line": 2}
+            ], "test_execution": "not run"}))
+            reply(identifier, {"stopReason": "end_turn"})
+            pending = None
+        elif "TEST_HISTORY" in prompt:
             chunk("## Result\n\n**Checking** files.", message_id="intro")
             chunk("Private reasoning", kind="agent_thought_chunk")
             send({"method": "session/update", "params": {

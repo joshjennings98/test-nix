@@ -1,0 +1,22 @@
+{
+  "rules": [
+    {
+      "id": "save-path",
+      "kind": "reaches",
+      "from": "example.com/service.Create",
+      "to": "example.com/service.Save"
+    },
+    {
+      "id": "save-signature",
+      "kind": "signature",
+      "symbol": "example.com/service.Save",
+      "signature": "func()"
+    },
+    {
+      "id": "no-direct-write",
+      "kind": "forbid_call",
+      "from": "example.com/service.Create",
+      "to": "example.com/service.Save"
+    }
+  ]
+}

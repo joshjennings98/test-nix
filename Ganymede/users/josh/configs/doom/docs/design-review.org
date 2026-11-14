@@ -1,0 +1,202 @@
+#+title: Org design review
+
+Org owns the review. The agent adds readable graph and test blocks through MCP.
+The Go tool validates Go declarations and relationships. Babel checks the current
+implementation or starts an independent Agent Shell assessment.
+
+* Start
+
+Rebuild the Nix configuration and restart Emacs. The Doom module installs
+=go-design-check= and loads the integration. Start a new Agent Shell session so
+its existing emacs-navigation MCP connection discovers the review tools. No
+separate ACP server configuration is needed.
+
+Ask the agent to create a review with =review-create=, then add graphs and tests.
+Alternatively use =M-x design-review-create=; a prefix argument explicitly selects
+no Git baseline. By default a review pins the project's current Git HEAD.
+
+In Org buffers:
+
+| Key       | Action                                         |
+|-----------+------------------------------------------------|
+| SPC m D n | Create a review                                |
+| SPC m D v | Validate the whole document                    |
+| SPC m D c | Execute the review block at point               |
+| SPC m D a | Check graphs and start all independent reviews  |
+| C-c C-c   | Normal Babel execution of the block at point    |
+
+Document validation does not execute Babel, run tests or start agents. It permits
+unimplemented proposals, but rejects malformed shapes, unknown symbols,
+invented existing relationships and contradictory requirements. Authoring commands
+validate the candidate document before saving it; rejected edits leave the file
+and the open buffer unchanged. Unrelated prose and unsaved notes are preserved.
+
+* Graph blocks
+
+The visible source might look like this:
+
+#+begin_example
+#+name: create-request
+#+begin_src design-graph :results drawer replace :exports both :eval never-export
+add function example.com/app.Validate :: func(name string) error
+example.com/app.Create
+  + example.com/app.Validate [direct_call] ; Reject invalid input
+  = example.com/app.Save [reaches] ; Preserve the storage path
+example.com/app.Request
+  example.com/app.(Request).Name [member]
+#+end_src
+#+end_example
+
+Unmarked entries are context. =+= adds a relationship, =-= removes it and ===
+preserves it. Children must identify =direct_call=, =reaches=, =implements= or
+=member=. Two spaces make one tree level. Multiple roots are independent.
+Descriptions follow = ; = and do not create mechanical requirements.
+
+Declaration lines use =add=, =modify=, =remove= or =preserve=, followed by a kind,
+canonical symbol and, where required, = :: signature=. Function/method signatures
+start with =func= and have no body. Types, interfaces, fields, variables and
+constants use Go declaration shapes. Removed declarations have no target shape.
+Import lines such as =import context "context"= provide aliases for shapes.
+Changing a field is also supported through an explicit field declaration.
+
+Proposed symbols can be referenced across blocks. Define a proposed symbol once;
+later blocks can refer to it. A new relationship involving a proposed symbol must
+be marked =+=. For a new multi-block design, add its declarations first, then the
+graph blocks that reference them. Reusing a block ID replaces that block.
+
+Use source inspection to identify full module/package-qualified symbol IDs;
+=validate-document= checks their resolution against the baseline and proposal.
+Type checking includes the baseline/proposal union. External packages are terminal
+nodes. Unresolved code evidence remains UNKNOWN and cannot validate an invented
+relationship. =reaches= describes a call path, not runtime order.
+
+* Tests and independent assessment
+
+A test-review block contains behaviours and expectations:
+
+#+begin_example
+- TestInvalidName :: Reject empty and whitespace-only names
+  - Return a validation error.
+  - Make no storage write.
+  - Fail if validation is bypassed.
+#+end_example
+
+The document uses one dedicated review conversation, separate from the
+implementation conversation. Review blocks queue as separate turns, with feedback
+returned to each block's results drawer. The template contains four focused reviews:
+- =test-review=: whether planned tests and new tests support the intended
+  behaviours, including missing coverage and contradictory assertions.
+- =implementation-review=: whether the planned implementation matches the
+  specified behaviours and responsibilities.
+- =diagram-review=: explicit conformance to each authored diagram, including
+  ordering, participants, branches, states and error paths as applicable.
+- =change-review=: changes outside the plan and whether they undermine planned
+  work, including changes inside planned functions, untracked files and non-Go files.
+
+Running all Babel blocks consolidates the deterministic findings and these four
+assessments inline. The reviewer receives the authored document, its specific task
+and Git changes. It can inspect source and run relevant tests, but must distinguish
+execution outcomes from semantic alignment. Large diffs are bounded in the brief;
+the reviewer must inspect remaining changes directly. Comment lines starting with
+=;= in test blocks allow an explicit placeholder before planned tests are listed;
+the reviewer must still discover and assess additional tests.
+
+An asynchronous result replaces RUNNING when the review completes. Results link
+to the review session, source locations and baseline-to-worktree Magit diffs near
+the relevant hunk. Findings from agents are advisory. The read-only brief does not
+replace the selected agent's permissions; existing permission handling remains.
+An invalid final response or interrupted session yields UNKNOWN.
+
+Results include a run time. There are no file watchers or automatic source
+invalidation. Rerun after changing code or the document. A callback will not replace
+an edited or removed originating block; its conversation remains available.
+Graph authoring clears that block's old result. Babel results change the open
+buffer; save normally to persist them. MCP reads the live buffer, including results
+that have not yet been saved.
+
+The pinned baseline is analysed in a temporary detached worktree, which is removed
+after validation. Generators are not run automatically. With baseline =none=,
+validation uses current code and historical change coverage is unavailable.
+
+* MCP operations
+
+| Tool               | Meaning                                      |
+|--------------------+----------------------------------------------|
+| review-create      | Create a template; never overwrite           |
+| review-read        | Read the live Org document                   |
+| review-set-graph   | Validate and upsert a named graph             |
+| review-set-context | Update planning notes and diagrams in Org |
+| review-set-tests   | Validate and upsert named test behaviours     |
+| validate-document  | Validate all authored content without checks |
+| review-check       | Execute one block, or all when ID is omitted |
+| review-results     | Read current results and running assessments |
+
+Graph requests use =path=, =id= and a =graph= object with =declarations= and/or
+=roots=. Each root/child has =symbol= and optional =description=, =change= and
+=children=; a child requires =relation=. Declarations have =symbol=, =kind=,
+=change= and optional =signature= / =imports=.
+
+Test requests use =path=, =id= and =tests=, an array of objects containing =name=,
+=description= and a non-empty =expectations= array. Test names and block IDs must
+be unique across the document.
+
+* Configuration and validation
+
+=design-review-program= can select another tool executable.
+=design-review-tool-arguments= supplies common build options to validation and
+checks, for example ='("--cgo" "off")=. The default analyses =./...= under the
+document's root with the host Go platform and inherited CGO settings.
+=design-review-agent-config= optionally overrides the review agent; the default
+is Codex with model =gpt-6-astra=. The same conversation is reused on reruns.
+Kill its buffer to start a new review conversation. A block already queued or
+running must finish before it can be submitted again.
+
+Offline tests in =tests/design-review.el= use the real Go executable, temporary
+Git repositories, Org, Magit and a deterministic local ACP fixture. They do not
+contact a model provider. The Nix package also runs the Go tests. Real model
+assessment quality still needs evaluation in day-to-day use.
+
+* Invoking the Emacs workflow
+
+Use =$org-design-review= in Codex/Agent Shell after activating this configuration.
+The skill is distributed through =~/.agents/skills= and Codex's skill configuration.
+It creates or resumes the live Org document, keeps decisions and diagrams there,
+uses validated graph/test/context tools, and reads asynchronous review results.
+
+=review-set-context= updates the complete Context and decisions section. Read the
+live document first and preserve existing notes. Use =**= or deeper subheadings.
+It preserves unrelated sections and unsaved edits and adds a diagram review block
+when an older document lacks one.
+
+* Mermaid and focused diagram review
+
+Mermaid editing and Babel rendering use =mermaid-mode=, =ob-mermaid= and the Nix
+=mermaid-cli= package. SVG HTML labels are disabled so Emacs displays their text.
+For example, put this in the backing document:
+
+#+begin_example
+#+name: save-sequence
+#+begin_src mermaid :file save-sequence.svg :results file replace :exports both :eval never-export
+sequenceDiagram
+    Client->>Store: Save
+    Store-->>Client: Result
+#+end_src
+#+end_example
+
+Execute with =C-c C-c=; images refresh inline. =C-c '= edits the Mermaid source.
+The whole-buffer Babel command renders diagrams and runs reviews. The specialised
+=review-check= command executes review blocks only, leaving diagram rendering to Babel.
+
+Every reviewer gets the full authored Org document, including diagram source and
+surrounding notes, with previous Babel results removed. Each reports only within
+its assigned remit. The review conversation is instructed to delegate each focused
+review to a fresh subagent when supported, passing the full plan and collecting
+findings; otherwise it performs reviews sequentially. Delegation is a recommendation
+in the prompt, not an ACP-enforced guarantee.
+
+The diagram reviewer owns diagram conformance. Other reviewers may use diagrams
+as context without duplicating this review. Findings name each diagram; missing
+assessments produce UNKNOWN. Mermaid, PlantUML, Dot, Ditaa and D2 blocks and authored
+image links are inventoried. Unnamed blocks get numbered IDs. Other diagrams in
+prose are the reviewer's responsibility to discover. Unavailable images require
+UNKNOWN. Rendering and static call edges do not prove runtime ordering.
