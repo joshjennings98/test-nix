@@ -94,7 +94,7 @@
        :desc "Message without switching" "m" #'agent-shell-inline-message
        :desc "Navigate preview" "n" #'agent-shell-inline-navigate
        :desc "Response actions" "o" #'agent-shell-inline--response-overlay-dispatch
-       :desc "Visit / review conversation" "v" #'agent-shell-inline-review
+       :desc "Review permissions / visit conversation" "v" #'agent-shell-inline-review
        :desc "Interrupt agent" "x" #'agent-shell-inline-interrupt
        :desc "Scroll response down" "j" #'agent-shell-inline--response-overlay-down
        :desc "Scroll response up" "k" #'agent-shell-inline--response-overlay-up
@@ -147,6 +147,13 @@
         :desc "Cancel prompt" "q" #'agent-shell-inline-quit
         :desc "Help" "h" #'agent-shell-inline-help))
 
+(after! (agent-shell-permission-transient evil)
+  (evil-set-initial-state 'agent-shell-permission-transient-details-mode 'normal)
+  (map! :map agent-shell-permission-transient-details-mode-map
+        :n "q" #'quit-window
+        :n "<escape>" #'quit-window
+        :n "C-g" #'quit-window))
+
 (after! (agent-shell evil)
   (evil-set-initial-state 'agent-shell-mode 'normal)
   (evil-set-initial-state 'agent-shell-viewport-view-mode 'normal)
@@ -186,6 +193,7 @@
         :n "<backtab>" #'agent-shell-previous-item
         "C-c RET" #'agent-shell-submit
         "C-c S-<return>" #'agent-shell-submit-override
+        "C-c C-p" #'agent-shell-permission-transient-menu
         :localleader
         :desc "Upstream menu" "h" #'agent-shell-help-menu
         :desc "Send / queue prompt" "s" #'agent-shell-submit
@@ -200,7 +208,7 @@
          :desc "Thought level" "t" #'agent-shell-set-session-thought-level
          :desc "Other ACP option" "o" #'agent-shell-set-session-config-option)
         (:prefix ("p" . "permissions and questions")
-         :desc "Latest permission" "p" #'agent-shell-jump-to-latest-permission-button-row
+         :desc "Review permissions" "p" #'agent-shell-permission-transient-menu
          :desc "Next permission button" "j" #'agent-shell-next-permission-button
          :desc "Previous permission button" "k" #'agent-shell-previous-permission-button
          :desc "Activate button" "RET" #'josh/agent-shell-return
@@ -300,6 +308,8 @@
         :n "[ c" #'diff-hunk-prev
         :n "RET" #'agent-shell-diff-open-file
         :n "q" #'kill-current-buffer
+        :n "<escape>" #'kill-current-buffer
+        :n "C-g" #'kill-current-buffer
         :localleader
         :desc "Accept changes" "a" #'agent-shell-diff-accept-all
         :desc "Reject changes" "r" #'agent-shell-diff-reject-all

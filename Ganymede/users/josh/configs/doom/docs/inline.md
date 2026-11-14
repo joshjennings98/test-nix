@@ -107,7 +107,7 @@ to the source and is visible again when you return to it.
 | --- | --- |
 | `n` | Enter temporary navigation |
 | `o` | Action menu: reply, review, copy, clear, interrupt, resize |
-| `v` | Visit conversation, jumping to pending permission/question controls |
+| `v` | Review pending permissions here; otherwise visit the conversation/question form |
 | `j/k` | Scroll by line |
 | `D/U` | Page down / up |
 | `x` | Interrupt the agent (retains its confirmation policy) |
@@ -131,9 +131,37 @@ width and scroll by displayed lines, without changing source-buffer truncation
 or copied response text. Separate agent messages receive paragraph breaks,
 including messages separated by thinking or tool activity.
 
-Permissions and question forms show “Review required” in the preview. They are
-handled in Agent Shell's native UI, not automatically accepted. A normal reply
-or completed response never opens the conversation window on its own.
+Permissions show “Review required” in the preview without opening a popup or
+capturing editing keys. Press `SPC a v` (or click review in the preview's action
+menu) to review that conversation's pending requests beside your source. The
+source window stays selected; the backing chat buffer stays in the background.
+
+Inside the permission menu, `y` allows once, `!` always allows when the agent
+offers that option, and `n` rejects and interrupts that conversation. `p`/`N`
+cycle requests only within that conversation. `q`, `Esc` and `C-g` defer without
+answering and restore your editing keys. A resolved or replaced request closes
+its menu instead of silently assigning the approval key to another request.
+
+The menu includes a shortened summary. Use `i` for the full request, including
+raw arguments and content; `q`/`Esc`/`C-g` return from this read-only view. Use
+`v` for available diffs: ordinary Evil navigation and yank keys remain intact,
+`SPC m a` accepts, `SPC m r` rejects, and `q`/`Esc`/`C-g` close without answering.
+Reopen `SPC a v` after inspection or deferral to make a decision.
+
+`B` asks for confirmation before bypassing permissions for that conversation's
+session. It answers queued and future requests with `allow_once` where offered;
+the setting resets on session cleanup or when the mode is disabled. The mode
+refuses to disable while requests are pending; resolve or interrupt them first.
+
+In a shell buffer, `C-c C-p` or `SPC m p p` opens the same manual menu. If the
+preview was closed, `M-x agent-shell-permission-transient-menu` lets you select
+a conversation with pending requests. Question forms still use Agent Shell's
+native UI. A normal reply or completed response never opens the chat itself.
+
+The permission extension is vendored from Jamie-Cui/agent-shell-permission-transient
+at `02db0bc1155186ea61ea041f3945909697fa17d7`, with local changes for manual inline
+review and session isolation. Its original licence is included in
+`agent-shell-permission-transient.el`.
 
 ## Differences from gptel-inline
 
@@ -154,8 +182,10 @@ Run it with the Nix-built editor's `--batch`, a writable `XDG_CACHE_HOME`, and
 `AGENT_SHELL_TEST_PYTHON` pointing to Python 3:
 
 ```sh
-emacs --batch -l users/josh/configs/doom/tests/inline.el -f ert-run-tests-batch-and-exit
+emacs --batch -l users/josh/configs/doom/tests/permissions.el -f ert-run-tests-batch-and-exit
 ```
 
 These tests do not contact a provider. The interactive Doom startup checks also
 cover the inline prompt's effective bindings and source-reference selection.
+The permission suite also runs the inline suite and checks approval, rejection,
+deferral, session isolation, full inspection, stale requests and Evil key handling.

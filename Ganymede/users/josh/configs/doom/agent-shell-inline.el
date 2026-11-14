@@ -35,7 +35,8 @@
 ;; Prompts are separate editable buffers, not indirect shell buffers.  Agent
 ;; Shell owns the conversation, ACP transport, tools, authentication and review.
 ;; Responses stream beside the source without displaying the shell.  Permissions
-;; and question forms show a review indicator; visit the conversation to act.
+;; show a review indicator and can be reviewed from the source window when the
+;; local permission transient is enabled. Question forms use the conversation.
 ;; Only one inline request per shell is allowed; busy shells leave drafts intact.
 ;; Clearing a preview stops following it, while interrupt explicitly cancels.
 ;;
@@ -51,6 +52,9 @@
 (require 'mwheel)
 (require 'vtable)
 (require 'agent-shell)
+
+(declare-function agent-shell-permission-transient-menu "agent-shell-permission-transient")
+(declare-function agent-shell-permission-transient--buffer-pending-count "agent-shell-permission-transient")
 
 (declare-function gfm-mode "markdown-mode")
 (declare-function org-escape-code-in-string "org-src")
@@ -319,7 +323,7 @@ Intended to be bound overlay-locally to a <down-mouse-1> EVENT."
 
 (defun agent-shell-inline--response-overlay-at-point ()
   "Return the `agent-shell-inline' response overlay relevant to point or event."
-  (let* ((is-mouse-event (consp last-input-event))
+  (let* ((is-mouse-event (mouse-event-p last-input-event))
          (win (if is-mouse-event
                   (posn-window (event-start last-input-event))
                 (selected-window)))
@@ -609,11 +613,15 @@ Create a shell without displaying it when the project has no conversation."
                                                "working")))))
         ((or 'permission-request 'elicitation-request)
          (overlay-put overlay 'agent-shell-inline-review kind)
-         (overlay-put overlay 'agent-shell-inline-status "Review required — visit conversation")
+         (overlay-put overlay 'agent-shell-inline-status "Review required — SPC a v")
          (message "Agent needs your input; use agent-shell-inline-review or SPC a v"))
         ((or 'permission-response 'elicitation-response)
-         (overlay-put overlay 'agent-shell-inline-review nil)
-         (overlay-put overlay 'agent-shell-inline-status "Working"))
+         (let ((pending (and (bound-and-true-p agent-shell-permission-transient-mode)
+                             (> (agent-shell-permission-transient--buffer-pending-count
+                                 (plist-get context :buffer) (map-elt data :request-id)) 0))))
+           (overlay-put overlay 'agent-shell-inline-review (and pending 'permission-request))
+           (overlay-put overlay 'agent-shell-inline-status
+                        (if pending "Review required — SPC a v" "Working"))))
         ('turn-complete
          (when (plist-get context :started)
            (overlay-put overlay 'agent-shell-inline-review nil)
@@ -1053,15 +1061,24 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
           t))))))
 
 (defun agent-shell-inline-review (&optional overlay)
-  "Visit the native permission or question controls for the nearest preview."
+  "Review the nearest preview's permissions or visit its conversation."
   (interactive)
   (let* ((overlay (or overlay (agent-shell-inline--response-overlay-at-point)))
-         (kind (and overlay (overlay-get overlay 'agent-shell-inline-review))))
-    (agent-shell-inline-visit-buffer
-     (and overlay (plist-get (overlay-get overlay 'agent-shell-inline) :buffer)))
-    (pcase kind
-      ('permission-request (agent-shell-jump-to-latest-permission-button-row))
-      ('elicitation-request (agent-shell-elicitation-jump-to-latest-form)))))
+         (kind (and overlay (overlay-get overlay 'agent-shell-inline-review)))
+         (shell (or (and overlay (plist-get (overlay-get overlay 'agent-shell-inline) :buffer))
+                    (plist-get agent-shell-inline--context :buffer)
+                    agent-shell-inline--last)))
+    (if (and (bound-and-true-p agent-shell-permission-transient-mode)
+             shell
+             (> (agent-shell-permission-transient--buffer-pending-count shell) 0))
+        (progn
+          (when-let* ((exit (and overlay (overlay-get overlay 'agent-shell-inline-navigation-exit))))
+            (funcall exit))
+          (agent-shell-permission-transient-menu shell))
+      (agent-shell-inline-visit-buffer shell)
+      (pcase kind
+        ('permission-request (agent-shell-jump-to-latest-permission-button-row))
+        ('elicitation-request (agent-shell-elicitation-jump-to-latest-form))))))
 
 (defun agent-shell-inline-copy-response (&optional overlay)
   "Copy the entire response, including lines outside the visible preview."

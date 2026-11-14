@@ -541,23 +541,27 @@
              (overlay (agent-shell-inline--setup-response-overlay
                        (list :marker (point-marker) :buffer (current-buffer))))
              (anchor (overlay-start overlay))
+             (next-line (save-excursion (forward-line 1) (point)))
              (event (list 'wheel-down (list window (point-min) '(0 . 0) 0)))
              called)
         (unwind-protect
             (progn
               (set-window-start window anchor)
-              (should
-               (eq (agent-shell-inline--scroll-document
-                    (lambda (received &rest args)
-                      (setq called t)
-                      (should (eq received event))
-                      (should (equal args '(2)))
-                      (set-window-start window (1+ anchor))
-                      'scrolled)
-                    event 2)
-                   'scrolled))
+              (cl-letf (((symbol-function 'agent-shell-inline--skip-scroll-block)
+                         (lambda (&rest _) (ert-fail "Scrolling already made progress"))))
+                (should
+                 (eq (agent-shell-inline--scroll-document
+                      (lambda (received &rest args)
+                        (setq called t)
+                        (should (eq received event))
+                        (should (equal args '(2)))
+                        (set-window-point window next-line)
+                        (set-window-start window next-line)
+                        'scrolled)
+                      event 2)
+                     'scrolled)))
               (should called)
-              (should (= (window-start window) (1+ anchor)))
+              (should (= (window-start window) next-line))
               (set-window-start window (point-min))
               (agent-shell-inline--scroll-document #'ignore event)
               (should (= (window-start window) (point-min)))
@@ -710,11 +714,28 @@
           (should (eq (key-binding (kbd "y")) 'evil-yank))
           (should (eq (key-binding (kbd "] c")) 'diff-hunk-next))
           (should (eq (key-binding (kbd "SPC m r")) 'agent-shell-diff-reject-all))
+          (should (eq (key-binding (kbd "<escape>")) 'kill-current-buffer))
+          (should (eq (key-binding (kbd "C-g")) 'kill-current-buffer))
           (execute-kbd-macro (kbd "SPC m a"))
           (should accepted)
           (should-not (buffer-live-p buffer)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest josh/permission-doom-details-bindings ()
+  (save-window-excursion
+    (with-temp-buffer
+      (agent-shell-permission-transient-details-mode)
+      (switch-to-buffer (current-buffer))
+      (evil-normal-state)
+      (dolist (key '("q" "<escape>" "C-g"))
+        (should (eq (key-binding (kbd key)) #'quit-window))))
+    (with-temp-buffer
+      (agent-shell-mode)
+      (switch-to-buffer (current-buffer))
+      (evil-normal-state)
+      (should (eq (key-binding (kbd "SPC m p p")) #'agent-shell-permission-transient-menu))
+      (should (eq (key-binding (kbd "C-c C-p")) #'agent-shell-permission-transient-menu)))))
 
 (ert-deftest josh/agent-shell-command-picker ()
   (let (chosen)

@@ -67,6 +67,38 @@
              (setq-local kill-buffer-query-functions nil))
            (kill-buffer shell))))))
 
+(ert-deftest josh/inline-preview-selection-distinguishes-mouse-and-system-events ()
+  (save-window-excursion
+    (let ((source (generate-new-buffer " *event-source*"))
+          (other (generate-new-buffer " *event-other*"))
+          source-overlay other-overlay)
+      (unwind-protect
+          (progn
+            (switch-to-buffer source)
+            (insert "Source\n")
+            (goto-char (point-min))
+            (setq source-overlay (agent-shell-inline--setup-response-overlay
+                                  (list :marker (point-marker) :buffer source)))
+            (let ((source-window (selected-window))
+                  (other-window (split-window-below)))
+              (set-window-buffer other-window other)
+              (with-selected-window other-window
+                (insert "Other\n")
+                (goto-char (point-min))
+                (setq other-overlay (agent-shell-inline--setup-response-overlay
+                                     (list :marker (point-marker) :buffer other))))
+              (dolist (event '(nil ?v (dbus-event :system) (switch-frame nil)))
+                (let ((last-input-event event))
+                  (should (eq (agent-shell-inline--response-overlay-at-point) source-overlay))))
+              (let ((last-input-event (list 'mouse-1 (list other-window 1 '(0 . 0) 0))))
+                (should (eq (agent-shell-inline--response-overlay-at-point) other-overlay)))
+              (should (eq (selected-window) source-window))
+              (should (eq (current-buffer) source))))
+        (dolist (overlay (list source-overlay other-overlay))
+          (when overlay (agent-shell-inline-clear-response-overlay overlay)))
+        (kill-buffer source)
+        (kill-buffer other)))))
+
 (ert-deftest josh/inline-background-and-follow-up ()
   (josh/with-inline-agent
     (let* ((window (selected-window))
@@ -298,17 +330,19 @@
       (should (equal (overlay-get overlay 'agent-shell-inline-status) "Interrupted")))))
 
 (ert-deftest josh/inline-permission-review ()
-  (josh/with-inline-agent
-    (let ((overlay (agent-shell-inline-message "TEST_PERMISSION" shell)))
-      (josh/inline-wait (lambda () (overlay-get overlay 'agent-shell-inline-review)))
-      (should (eq (current-buffer) source))
-      (should-not (get-buffer-window shell))
-      (should (eq (agent-shell-status :shell-buffer shell) 'blocked))
-      (agent-shell-inline-review)
-      (should (eq (current-buffer) shell))
-      (should (get-text-property (point) 'agent-shell-permission-button))
-      (agent-shell-interrupt)
-      (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status)))))))
+  (let ((agent-shell-permission-responder-function nil)
+        (agent-shell-permission-transient-mode nil))
+    (josh/with-inline-agent
+      (let ((overlay (agent-shell-inline-message "TEST_PERMISSION" shell)))
+        (josh/inline-wait (lambda () (overlay-get overlay 'agent-shell-inline-review)))
+        (should (eq (current-buffer) source))
+        (should-not (get-buffer-window shell))
+        (should (eq (agent-shell-status :shell-buffer shell) 'blocked))
+        (agent-shell-inline-review)
+        (should (eq (current-buffer) shell))
+        (should (get-text-property (point) 'agent-shell-permission-button))
+        (agent-shell-interrupt)
+        (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status))))))))
 
 (ert-deftest josh/inline-error-and-source-cleanup ()
   (josh/with-inline-agent

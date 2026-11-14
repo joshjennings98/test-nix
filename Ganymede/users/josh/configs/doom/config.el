@@ -20,6 +20,8 @@
         ispell-alternate-dictionary (expand-file-name "english-words" doom-user-dir)))
 
 (load! "keys")
+(load! "agent-shell-permission-transient")
+(agent-shell-permission-transient-mode 1)
 (load! "agent-shell-inline")
 (load! "agent-shell-completion-notify")
 (load! "agent-shell-navigation")

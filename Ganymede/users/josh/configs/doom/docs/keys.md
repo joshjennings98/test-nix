@@ -56,7 +56,7 @@ persisted state directory. Scheduling data lives in the Org files themselves.
 | `P` | Centre an existing inline preview; cycle through open previews |
 | `j/k`, `D/U` | Scroll inline response by line or page |
 | `n`, `o` | Enter preview navigation, response actions |
-| `v`, `x` | Visit/review conversation, interrupt |
+| `v`, `x` | Review permissions here (otherwise visit conversation), interrupt |
 | `?` | All Agent Shell commands |
 
 The [inline workflow guide](inline.md) covers reference selection, prompt
@@ -83,7 +83,8 @@ meaning, including shell selection. Image commands need upstream's image tools.
 | `x` | Interrupt and reject pending permission requests |
 | `c`, `r`, `o` | Compose, quote selection, switch shell/viewport |
 | `m m/c/v/t/o` | Mode, cycle mode, model, thought level, any ACP option |
-| `p p/j/k/RET` | Latest permission, next/previous button, activate selected button |
+| `p p` / `C-c C-p` | Open manual permission review |
+| `p j/k/RET` | Navigate/activate native buttons when present |
 | `p q/n/b/v` | Latest question form, next/previous field, preview option |
 | `q q/d/r/s` | Queue prompt, remove queued prompt, resume queue, steer turn |
 | `i f/p/!/d` | Insert file, clipboard, shell command output, text drawing |
