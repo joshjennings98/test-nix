@@ -1,0 +1,61 @@
+#+title: emacs2 in the Ganymede template
+
+This is the standalone, Nix-managed minimal-emacs.d configuration, alongside
+the existing Doom setup. Run =emacs2= from a shell or select it in the launcher.
+Its desktop entry is also named =emacs2=.
+
+* Template integration
+
+The repository root exports templates; the Ganymede directory becomes the
+root of the installed configuration after =nix flake init -t ...#Ganymede=.
+All configuration and test references are relative to that template root.
+Nothing depends on the original machine's checkout or Nix store paths.
+
+- =users/josh/nix/overlays/emacs2.nix= pins minimal-emacs.d, installs Emacs
+  packages through Nix, supplies language tools and builds the startup checks.
+- =users/josh/nix/minimal-emacs.nix= supplies fonts, the desktop entry and
+  persistence for editor state.
+- =users/josh/nix/home.nix= enables the overlay, module and executable.
+- =users/josh/configs/minimal-emacs/*.el= contains the editor settings.
+- =users/josh/tests/emacs2-startup.el= exercises the configured editor.
+
+The existing Ganymede flake inputs and lock file supply Emacs and its packages.
+The package build retains Nix's native compilation support. This integration
+does not change the separate Phobos template or the default editor.
+
+* State and project trust
+
+State is created at runtime in =~/.local/state/emacs2/= (or under
+=$XDG_STATE_HOME/emacs2=). Ganymede persists the default location under
+=/persist=. No sessions, histories, backups or trusted project choices ship
+with the template. If overriding =XDG_STATE_HOME=, adjust persistence to match.
+
+Immediate subdirectories of =~/Documents/= are discovered as projects.
+Discovery does not grant trust. Click the modeline's trust indicator or use
+=SPC P t= to confirm trust for a project; =SPC P u= revokes it. Choices are
+stored in the persisted =trusted-projects= state file.
+
+* Validation
+
+From the Ganymede template or installed configuration root, build the executable
+and startup checks without generating hardware files or activating a system:
+
+#+begin_src sh
+nix build --impure --expr '
+  let
+    f = builtins.getFlake ("path:" + toString ./.);
+    pkgs = import f.inputs.nixpkgs {
+      system = builtins.currentSystem;
+      overlays = [
+        f.inputs.emacs-overlay.overlays.default
+        (import ./users/josh/nix/overlays/emacs2.nix)
+      ];
+    };
+  in [ pkgs.emacs2 pkgs.emacs2.tests.startup ]
+' --no-link --print-out-paths
+#+end_src
+
+When checking from this repository, run that command inside =Ganymede/=.
+The startup checks use a temporary home and do not alter editor state.
+The installer's generated hardware and disk configuration remain independent
+of this editor setup.
