@@ -55,6 +55,11 @@
 
 (declare-function agent-shell-permission-transient-menu "agent-shell-permission-transient")
 (declare-function agent-shell-permission-transient--buffer-pending-count "agent-shell-permission-transient")
+(declare-function agent-shell-permission-transient--request-shell-buffer "agent-shell-permission-transient")
+(declare-function agent-shell-permission-transient--request-pending-p "agent-shell-permission-transient")
+(declare-function agent-shell-permission-transient--option "agent-shell-permission-transient")
+(declare-function agent-shell-permission-transient--respond "agent-shell-permission-transient")
+(defvar agent-shell-permission-transient--queue)
 
 (declare-function gfm-mode "markdown-mode")
 (declare-function org-escape-code-in-string "org-src")
@@ -275,54 +280,66 @@ Clamps INDEX to the valid range based on source buffer line count."
     (overlay-put ov 'agent-shell-inline-scroll-index (min (max 0 index) max-index))))
 
 ;;;;;; Response overlay manipulation commands
+(defun agent-shell-inline--drag-anchor-y (window)
+  "Return the pixel Y below the source line at point in WINDOW.
+Call with the dragged preview's display string temporarily removed."
+  (+ (cdr (window-text-pixel-size window (window-start window)
+                                  (line-end-position) nil nil 'header-line))
+     (window-tab-line-height window)
+     (- (window-vscroll window t))))
+
+(defun agent-shell-inline--drag-position (overlay window y)
+  "Return the source line nearest pixel Y in WINDOW, excluding OVERLAY."
+  (agent-shell-inline--measure-without-previews
+   (list overlay)
+   (lambda ()
+     (with-current-buffer (window-buffer window)
+       (save-excursion
+         (goto-char (window-start window))
+         (beginning-of-line)
+         (let ((best (point))
+               distance done)
+           (while (not done)
+             (let* ((height (agent-shell-inline--drag-anchor-y window))
+                    (difference (abs (- height y))))
+               (when (or (null distance) (< difference distance))
+                 (setq best (point) distance difference))
+               (setq done (or (>= height y) (/= (forward-line 1) 0)))))
+           best))))))
+
 (defun agent-shell-inline--response-overlay-drag (event)
-  "Move the response overlay by dragging it with the mouse.
-Dragging across windows is supported, but across frames is not.
-Intended to be bound overlay-locally to a <down-mouse-1> EVENT."
+  "Move the preview with EVENT, preserving the pointer's grab offset."
   (interactive "e")
-  (let* ((start-posn (event-start event))
-         (start-window (posn-window start-posn))
-         (end-window)
-         (ov (with-selected-window start-window
-               (cl-loop for o in (overlays-in (1- (posn-point start-posn))
-                                              (1+ (posn-point start-posn)))
-                        when (overlay-get o 'agent-shell-inline)
-                        return o)))
-         (mouse-autoselect-window)      ;messes with window calculations below
-         (echo-keystrokes 0)            ;noisy
-         (was-tooltip-mode tooltip-mode) ;avoid flickering
-         (use-system-tooltips nil))
-    (when (overlayp ov)
-      (unwind-protect
-          (progn
-            (tooltip-mode -1)
-            (track-mouse
-              (let ((track-mouse 'dragging))
-                (while-let ((ev (read-event))
-                            ((mouse-movement-p ev)))
-                  (when-let* ((new-pos (posn-point (event-end ev))))
-                    (setq end-window (posn-window (event-end ev)))
-                    (when (framep end-window)
-                      ;; TODO Dragging across frames; it's tough to get this right
-                      (select-frame-set-input-focus end-window)
-                      (setq end-window (frame-selected-window end-window)))
-                    (unless (and (= new-pos (posn-point start-posn))
-                                 (eq (window-buffer end-window) (window-buffer start-window)))
-                      (with-selected-window end-window
-                        (save-excursion
-                          (goto-char new-pos)
-                          (let ((start (pos-bol)) (end (pos-eol)))
-                            (when (= start end)
-                              (cond ((not (bobp)) (cl-decf start))
-                                    ((not (eobp)) (cl-incf end))))
-                            (move-overlay ov start end
-                                          (window-buffer end-window))))))))))
-            (unless (or (null end-window) (eq start-window end-window))
-              (agent-shell-inline--response-overlay-mode -1)
-              (with-selected-window end-window
-                (agent-shell-inline--setup-response-overlay-keymap ov)
-                (agent-shell-inline--response-overlay-mode 1))))
-        (when was-tooltip-mode (tooltip-mode 1))))))
+  (let* ((start (event-start event))
+         (window (posn-window start))
+         (last-input-event event)
+         (overlay (agent-shell-inline--response-overlay-at-point))
+         (mouse-autoselect-window nil))
+    (when overlay
+      (let ((offset
+             (- (cdr (posn-x-y start))
+                (agent-shell-inline--measure-without-previews
+                 (list overlay)
+                 (lambda ()
+                   (with-current-buffer (window-buffer window)
+                     (save-excursion
+                       (goto-char (overlay-start overlay))
+                       (agent-shell-inline--drag-anchor-y window))))))))
+        (track-mouse
+          (let ((track-mouse 'dragging)
+                next)
+            (while (progn (setq next (read-event)) (mouse-movement-p next))
+              (let* ((position (event-end next))
+                     (target (posn-window position)))
+                (when (window-live-p target)
+                  (with-selected-window target
+                    (save-excursion
+                      (goto-char (agent-shell-inline--drag-position
+                                  overlay target (- (cdr (posn-x-y position)) offset)))
+                      (move-overlay overlay (line-beginning-position)
+                                    (line-end-position) (current-buffer))
+                      (agent-shell-inline--setup-response-overlay-keymap overlay)))
+                  (redisplay t))))))))))
 
 (defun agent-shell-inline--response-overlay-scroll-to (index response-ov)
   "Scroll RESPONSE-OV to display line INDEX and re-render."
@@ -568,6 +585,9 @@ Create a shell without displaying it when the project has no conversation."
 
 (defun agent-shell-inline--detach (overlay)
   "Unsubscribe OVERLAY and release its pending submission."
+  (when-let* ((timer (overlay-get overlay 'agent-shell-inline-timer)))
+    (cancel-timer timer)
+    (overlay-put overlay 'agent-shell-inline-timer nil))
   (let* ((context (overlay-get overlay 'agent-shell-inline))
          (shell (plist-get context :buffer)))
     (when (buffer-live-p shell)
@@ -580,10 +600,75 @@ Create a shell without displaying it when the project has no conversation."
           (plist-get context :pending) nil)))
 
 (defun agent-shell-inline--finish (overlay status)
-  "Finish following OVERLAY with STATUS while retaining its preview."
-  (agent-shell-inline--detach overlay)
+  "Finish the current turn with STATUS; keep OVERLAY following its conversation."
+  (let* ((context (overlay-get overlay 'agent-shell-inline))
+         (shell (plist-get context :buffer)))
+    (when-let* ((timer (overlay-get overlay 'agent-shell-inline-timer)))
+      (cancel-timer timer)
+      (overlay-put overlay 'agent-shell-inline-timer nil))
+    (setf (plist-get context :started) nil
+          (plist-get context :pending) nil)
+    (when (buffer-live-p shell)
+      (with-current-buffer shell
+        (when (eq agent-shell-inline--active overlay)
+          (setq agent-shell-inline--active nil)))))
+  (overlay-put overlay 'agent-shell-inline-activity nil)
   (overlay-put overlay 'agent-shell-inline-status status)
   (agent-shell-inline--response-overlay-render overlay))
+
+(defun agent-shell-inline--check-activity (overlay)
+  "Refresh OVERLAY from shell and transport state, without echo messages."
+  (let* ((context (overlay-get overlay 'agent-shell-inline))
+         (shell (plist-get context :buffer)))
+    (cond
+     ((not (overlay-buffer overlay)) (agent-shell-inline--detach overlay))
+     ((not (buffer-live-p shell))
+      (agent-shell-inline--finish overlay "Conversation closed")
+      (agent-shell-inline--detach overlay))
+     (t
+      (with-current-buffer shell
+        (let* ((process (map-nested-elt agent-shell--state '(:client :process)))
+               (status (agent-shell-status))
+               (last-activity (map-elt agent-shell--state :last-activity-time))
+               (last-event (overlay-get overlay 'agent-shell-inline-last-event))
+               (quiet (- (float-time)
+                         (max (if last-activity (float-time last-activity) 0)
+                              (or last-event 0)))))
+          (cond
+           ((and (plist-get context :started)
+                 (not (and process (process-live-p process))))
+            (agent-shell-inline--finish overlay "Disconnected — visit conversation"))
+           ((and (plist-get context :started) (eq status 'ready))
+            (agent-shell-inline--finish overlay "Stopped — visit conversation"))
+           (t
+            (overlay-put overlay 'agent-shell-inline-activity
+                         (cond
+                          ((eq status 'blocked) "[?] Waiting for input")
+                          ((>= quiet 30) (format "[.] Quiet for %ds" quiet))
+                          (t (string (aref "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" (% (floor (* 10 (float-time))) 10))))))
+            (agent-shell-inline--response-overlay-render overlay)))))))))
+
+(defun agent-shell-inline--start-following (overlay prompt)
+  "Follow newly submitted PROMPT in OVERLAY, retaining browsed history."
+  (let* ((context (overlay-get overlay 'agent-shell-inline))
+         (shell (plist-get context :buffer)))
+    (setf (plist-get context :started) t
+          (plist-get context :prompt) prompt)
+    (with-current-buffer (plist-get context :src) (erase-buffer))
+    (overlay-put overlay 'agent-shell-inline-interaction-index
+                 (with-current-buffer shell (max 0 (1- (length (shell-maker-history))))))
+    (overlay-put overlay 'agent-shell-inline-history-total
+                 (1+ (overlay-get overlay 'agent-shell-inline-interaction-index)))
+    (overlay-put overlay 'agent-shell-inline-message-group nil)
+    (overlay-put overlay 'agent-shell-inline-review nil)
+    (overlay-put overlay 'agent-shell-inline-status "Working")
+    (overlay-put overlay 'agent-shell-inline-activity "⠋")
+    (overlay-put overlay 'agent-shell-inline-last-event (float-time))
+    (unless (overlay-get overlay 'agent-shell-inline-history-index)
+      (overlay-put overlay 'agent-shell-inline-scroll-index 0))
+    (unless (overlay-get overlay 'agent-shell-inline-timer)
+      (overlay-put overlay 'agent-shell-inline-timer
+                   (run-at-time 0.1 0.1 #'agent-shell-inline--check-activity overlay)))))
 
 (defun agent-shell-inline--submit-pending (overlay)
   "Submit the pending prompt for OVERLAY once the shell is initialised."
@@ -609,7 +694,11 @@ Create a shell without displaying it when the project has no conversation."
     (let* ((context (overlay-get overlay 'agent-shell-inline))
            (data (map-elt event :data))
            (kind (map-elt event :event)))
+      (unless (eq kind 'idle)
+        (overlay-put overlay 'agent-shell-inline-last-event (float-time)))
       (pcase kind
+        ('input-submitted
+         (agent-shell-inline--start-following overlay (map-elt data :prompt)))
         ('init-finished
          (condition-case err
              (agent-shell-inline--submit-pending overlay)
@@ -639,7 +728,9 @@ Create a shell without displaying it when the project has no conversation."
         ((or 'permission-request 'elicitation-request)
          (overlay-put overlay 'agent-shell-inline-review kind)
          (overlay-put overlay 'agent-shell-inline-status "Review required — SPC a v")
-         (message "Agent needs your input; use agent-shell-inline-review or SPC a v"))
+         (when (eq overlay (buffer-local-value 'agent-shell-inline--active
+                                                 (plist-get context :buffer)))
+           (message "Agent needs your input; use agent-shell-inline-review or SPC a v")))
         ((or 'permission-response 'elicitation-response)
          (let ((pending (and (bound-and-true-p agent-shell-permission-transient-mode)
                              (> (agent-shell-permission-transient--buffer-pending-count
@@ -662,7 +753,8 @@ Create a shell without displaying it when the project has no conversation."
         ('session-selection-cancelled
          (agent-shell-inline--finish overlay "Session selection cancelled"))
         ('clean-up
-         (agent-shell-inline--finish overlay "Conversation closed")))
+         (agent-shell-inline--finish overlay "Conversation closed")
+         (agent-shell-inline--detach overlay)))
       (agent-shell-inline--response-overlay-render overlay))))
 
 (defun agent-shell-inline--send (text context)
@@ -718,6 +810,39 @@ provided by the editor configuration; they do not install bindings."
        (format "M-x %s" command))
    'face 'help-key-binding))
 
+(defun agent-shell-inline--click (event)
+  "Run EVENT's displayed action, including within a transient map."
+  (interactive "e")
+  (let* ((text (posn-string (event-start event)))
+         (map (and text (get-text-property (cdr text) 'keymap (car text))))
+         (command (lookup-key (or map agent-shell-inline-response-overlay-map)
+                              (vector (car event)))))
+    (when (commandp command)
+      (if (eq command #'agent-shell-inline--response-overlay-drag)
+          (funcall command event)
+        (let ((last-input-event event))
+          (call-interactively command))))))
+
+(defun agent-shell-inline--pending-permissions (overlay)
+  "Return a snapshot of OVERLAY's conversation permissions that allow once."
+  (when (bound-and-true-p agent-shell-permission-transient-mode)
+    (let ((shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer)))
+      (seq-filter
+       (lambda (request)
+         (and (eq shell (agent-shell-permission-transient--request-shell-buffer request))
+              (agent-shell-permission-transient--option request "allow_once")))
+       agent-shell-permission-transient--queue))))
+
+(defun agent-shell-inline-approve (overlay &optional all)
+  "Approve the oldest pending request in OVERLAY, or the current snapshot if ALL."
+  (interactive (list (agent-shell-inline--response-overlay-at-point) current-prefix-arg))
+  (let ((requests (agent-shell-inline--pending-permissions overlay)))
+    (unless requests (user-error "No pending permissions that allow once"))
+    (dolist (request (if all requests (list (car requests))))
+      (when (agent-shell-permission-transient--request-pending-p request)
+        (agent-shell-permission-transient--respond request "allow_once")))
+    (agent-shell-inline--response-overlay-render overlay)))
+
 (defun agent-shell-inline--response-button (label action)
   "Make LABEL run interactive ACTION when clicked."
   (let ((map (make-sparse-keymap)))
@@ -729,7 +854,7 @@ provided by the editor configuration; they do not install bindings."
 
 (defun agent-shell-inline--response-overlay-header (overlay &optional up down)
   "Return the status and navigation header for OVERLAY, with UP and DOWN hints."
-  (format "%s%s%s | %s"
+  (format "%s%s%s%s%s | %s"
           (if (and up (not (string-empty-p up)))
               (agent-shell-inline--response-button
                up (lambda () (interactive) (agent-shell-inline--response-overlay-up overlay)))
@@ -738,11 +863,22 @@ provided by the editor configuration; they do not install bindings."
               (agent-shell-inline--response-button
                down (lambda () (interactive) (agent-shell-inline--response-overlay-down overlay)))
             "")
+          (if-let* ((activity (overlay-get overlay 'agent-shell-inline-activity)))
+              (concat (propertize activity 'face 'shadow) " ")
+            "")
           (if-let* ((index (overlay-get overlay 'agent-shell-inline-history-index)))
               (format "Reply %s/%s | Live: %s" (1+ index)
                       (overlay-get overlay 'agent-shell-inline-history-total)
                       (overlay-get overlay 'agent-shell-inline-status))
             (or (overlay-get overlay 'agent-shell-inline-status) "Starting agent"))
+          (if (agent-shell-inline--pending-permissions overlay)
+              (concat " | "
+                      (agent-shell-inline--response-button
+                       "Approve" (lambda () (interactive) (agent-shell-inline-approve overlay)))
+                      " / "
+                      (agent-shell-inline--response-button
+                       "Approve all" (lambda () (interactive) (agent-shell-inline-approve overlay t))))
+            "")
           (or (overlay-get overlay 'agent-shell-inline-header)
               (mapconcat
                #'identity
@@ -895,13 +1031,17 @@ Esc or q exits.  Any other editing command exits and runs normally."
                      ("g" "live" ,(lambda () (interactive) (agent-shell-inline--show-live overlay)))))
       (define-key map (kbd (car entry)) (nth 2 entry))
       (push (agent-shell-inline--response-button
-             (format "%s %s" (car entry) (cadr entry))
+             (format "%s %s" (propertize (car entry) 'face 'help-key-binding)
+                     (cadr entry))
              (nth 2 entry)) hints)
       (push (nth 2 entry) commands))
+    (define-key map [down-mouse-1] #'agent-shell-inline--click)
+    (define-key map [mouse-1] #'agent-shell-inline--click)
+    (push #'agent-shell-inline--click commands)
     (dolist (key '("q" "ESC" "<escape>" "C-g"))
       (define-key map (kbd key) #'ignore))
     (push (agent-shell-inline--response-button
-           "Esc/q exit"
+           (concat (propertize "Esc/q" 'face 'help-key-binding) " exit")
            (lambda ()
              (interactive)
              (when-let* ((exit (overlay-get overlay 'agent-shell-inline-navigation-exit)))
@@ -1172,6 +1312,9 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
                (format "%s %s" (propertize (car entry) 'face 'help-key-binding)
                        (cadr entry))
                command) hints)))
+    (define-key map [down-mouse-1] #'agent-shell-inline--click)
+    (define-key map [mouse-1] #'agent-shell-inline--click)
+    (push #'agent-shell-inline--click commands)
     (define-key map (kbd "=") (lookup-key map (kbd "+")))
     (dolist (key '("ESC" "<escape>" "C-g"))
       (define-key map (kbd key) (lookup-key map (kbd "q"))))

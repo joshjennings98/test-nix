@@ -228,3 +228,46 @@
           (agent-shell-permission-transient-mode -1)
           (should (eq agent-shell-permission-responder-function #'ignore)))
       (agent-shell-permission-transient-mode -1))))
+
+(ert-deftest josh/permission-inline-click-approves-without-opening-shell ()
+  (josh/with-permission-review
+    (let ((overlay (agent-shell-inline-message "TEST_PERMISSION" shell)))
+      (josh/inline-wait (lambda () (agent-shell-inline--pending-permissions overlay)))
+      (agent-shell-inline--check-activity overlay)
+      (should (equal (overlay-get overlay 'agent-shell-inline-activity) "[?] Waiting for input"))
+      (let* ((text (overlay-get overlay 'after-string))
+             (index (string-match "Approve /" text))
+             (event (list 'mouse-1
+                          (list (selected-window) 1 '(0 . 0) 0 (cons text index)))))
+        (should index)
+        (agent-shell-inline--click event))
+      (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status))))
+      (should-not (agent-shell-inline--pending-permissions overlay))
+      (should-not (overlay-get overlay 'agent-shell-inline-timer))
+      (should (eq (current-buffer) source))
+      (should-not (get-buffer-window shell)))))
+
+(ert-deftest josh/permission-inline-approve-all-is-a-conversation-snapshot ()
+  (josh/with-permission-review
+    (let ((overlay (agent-shell-inline--setup-response-overlay
+                    (list :marker (point-marker) :buffer shell)))
+          (other (generate-new-buffer " *other-approval-shell*"))
+          answered)
+      (unwind-protect
+          (progn
+            (with-current-buffer other (agent-shell-mode))
+            (josh/permission-request other "other" (lambda (_) (ert-fail "Approved another conversation")))
+            (josh/permission-request
+             shell "first"
+             (lambda (option)
+               (push (cons "first" option) answered)
+               (josh/permission-request shell "later" (lambda (_) (ert-fail "Approved a future request")))))
+            (josh/permission-request shell "second" (lambda (option) (push (cons "second" option) answered)))
+            (agent-shell-inline-approve overlay t)
+            (should (equal (reverse answered) '(("first" . "allow") ("second" . "allow"))))
+            (should (= 1 (agent-shell-permission-transient--buffer-pending-count shell)))
+            (should (= 1 (agent-shell-permission-transient--buffer-pending-count other)))
+            (should-not (buffer-local-value 'agent-shell-permission-transient--bypass-permissions shell))
+            (should (eq (current-buffer) source)))
+        (agent-shell-inline-clear-response-overlay overlay)
+        (kill-buffer other)))))

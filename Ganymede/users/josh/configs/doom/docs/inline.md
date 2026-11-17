@@ -64,6 +64,23 @@ and send with `:wq`; the reply appears in that file with the same conversation
 history. This does not select the separate reviewer session unless you last used
 that session for an inline message. Closed conversations are skipped.
 
+All existing previews of that conversation follow new turns, including messages
+sent in the conversation buffer. A preview showing an older reply stays there;
+use its live control to return to the latest response.
+
+Drag a preview vertically to move it immediately, even while the pointer remains
+inside it. Dragging measures displayed line heights and preserves where you grabbed
+the preview, including across windows. Navigation controls are clickable while their
+temporary keymap is active, with keys highlighted like the options panel.
+Pending permissions show **Approve** (the oldest request) and **Approve all**
+(all requests currently waiting in that conversation). Both approve once; they
+leave other conversations and future requests unchanged.
+
+A single Braille spinner character updates every 100 ms while the agent is working. It
+checks Agent Shell and the ACP process, stops for permission input, and shows
+errors or disconnection instead of spinning indefinitely. After 30 seconds
+without activity it shows a quiet duration: silence alone does not prove failure.
+
 An empty or whitespace-only draft closes without sending, even with source
 context selected. If sending fails or the agent is busy, the draft stays open.
 
