@@ -39,7 +39,7 @@
     ("test-review"
      "Assess the tests named in this block, using the full document as context. Explain whether their assertions establish the stated behaviours and identify missing coverage for those behaviours. Do not repeat assessments owned by other test blocks. If this block has no named tests, discover added or changed tests, including untracked tests, and assess their alignment. Distinguish test execution from alignment.")
     ("implementation-review"
-     "Review the implementation of all planned work against the full document: behaviour, responsibilities, edge cases and requirements. Explain what matches, what is missing and what contradicts the plan. Deterministic graph checks and passing tests alone do not establish implementation alignment.")
+     "Review the implementation of all planned work against the full document: behaviour, responsibilities, edge cases and requirements. Explain what matches, what is missing and what contradicts the plan. Deterministic graph checks and passing tests alone do not establish implementation alignment. Add a top-level status field to your final JSON: PASS, FAIL, REVIEW or UNKNOWN. PASS means you found no implementation concern and no unresolved question; every finding must then also be PASS. Test reviews will run only after graph checks and this implementation assessment pass. Do not assess test quality in this stage.")
     ("diagram-review"
      "Review conformance to each authored diagram, using the full plan as context. Own the diagram assessments: check interactions, order, states, branches, error paths and side effects where depicted. Give evidence for matches, mismatches and uncertainty. Do not take over test alignment, general implementation review or out-of-plan change review.")
     ("change-review"
@@ -155,6 +155,18 @@
         (setq lines (append lines '("UNKNOWN: reviewer did not return the required assessment format; inspect its conversation.")))
       (setq lines (append lines (list (design-review--text (alist-get 'summary decoded))
                                      (format "Test execution: %s" (design-review--text (alist-get 'test_execution decoded))))))
+      (when (equal (plist-get run :language) "implementation-review")
+        (setf (plist-get run :outcome)
+              (cond ((and (equal (alist-get 'status decoded) "PASS")
+                          (seq-every-p (lambda (finding) (equal (alist-get 'status finding) "PASS"))
+                                       (alist-get 'findings decoded))
+                          (or (null (alist-get 'uncertainty_assessments decoded))
+                              (and (vectorp (alist-get 'uncertainty_assessments decoded))
+                                   (seq-every-p (lambda (entry) (and (listp entry) (equal (alist-get 'assessment entry) "checked_no_concern")))
+                                                (alist-get 'uncertainty_assessments decoded))))) "PASS")
+                    ((member (alist-get 'status decoded) '("FAIL" "REVIEW" "UNKNOWN")) (alist-get 'status decoded))
+                    (t "UNKNOWN")))
+        (setq lines (append lines (list (format "Implementation verdict: %s" (plist-get run :outcome))))))
       (dolist (finding (append (alist-get 'findings decoded) nil))
         (let ((status (alist-get 'status finding)) (line (alist-get 'line finding)))
           (unless (member status '("PASS" "REVIEW" "FAIL" "UNKNOWN")) (setq status "UNKNOWN"))
@@ -178,6 +190,12 @@
 
 (defun design-review--finish (key run text)
   "Complete RUN, inserting TEXT only into its unchanged originating block."
+  (when (and (eq run (gethash key design-review--runs))
+             (equal (plist-get run :language) "implementation-review"))
+    (when-let* ((gate (plist-get (plist-get run :document) :test-gate))
+                (entry (assoc (cdr key) (plist-get gate :implementations))))
+      (setcdr entry (if (design-review--run-current-p run)
+                        (or (plist-get run :outcome) "UNKNOWN") "STALE"))))
   (when-let* ((subscription (plist-get run :subscription))
               ((buffer-live-p (plist-get run :shell))))
     (with-current-buffer (plist-get run :shell)
@@ -238,14 +256,46 @@
   (when (and (eq run (gethash key design-review--runs)) (not (plist-get run :submitted))
              (buffer-live-p (plist-get run :shell))
              (agent-shell-initialized-p :shell-buffer (plist-get run :shell)))
-    (setf (plist-get run :submitted) t)
-    (condition-case err
-        (agent-shell-insert :text (plist-get run :prompt) :submit t :no-focus t :shell-buffer (plist-get run :shell))
-      (error (design-review--finish key run (format "UNKNOWN: could not submit review: %s" (error-message-string err)))))))
+    (let ((reason (and (equal (plist-get run :language) "test-review")
+                       (design-review--test-gate-reason run))))
+      (cond ((equal reason "WAITING") nil)
+            (reason (design-review--finish key run (format "%s\nBLOCKED: test review not run. %s" (design-review--stamp) reason)))
+            (t
+             (setf (plist-get run :submitted) t)
+             (condition-case err
+                 (agent-shell-insert :text (plist-get run :prompt) :submit t :no-focus t :shell-buffer (plist-get run :shell))
+               (error (design-review--finish key run (format "UNKNOWN: could not submit review: %s" (error-message-string err))))))))))
+
+(defun design-review--run-current-p (run)
+  "Whether RUN still describes the same authored plan and saved source."
+  (let ((document (plist-get run :document)) (buffer (car (plist-get run :key))))
+    (and (buffer-live-p buffer) (plist-get document :fingerprint)
+         (condition-case nil
+             (with-current-buffer buffer
+               (and (equal (plist-get document :authored-text) (design-review--authored-text))
+                    (equal (plist-get document :fingerprint) (design-review--source-fingerprint document))))
+           (error nil)))))
+
+(defun design-review--test-gate-reason (run)
+  "Return nil when test RUN may start, WAITING, or an explicit blocking reason."
+  (let* ((gate (plist-get (plist-get run :document) :test-gate))
+         (implementations (plist-get gate :implementations)))
+    (cond ((not gate) "Run the document check to obtain graph and implementation prerequisites.")
+          ((plist-get gate :graph-blocker) (plist-get gate :graph-blocker))
+          ((not implementations) "No implementation-review block is available.")
+          ((not (design-review--run-current-p run)) "Source or plan changed; rerun the checks and implementation review.")
+          ((seq-find (lambda (entry) (not (member (cdr entry) '("PASS" "PENDING")))) implementations)
+           (let ((entry (seq-find (lambda (entry) (not (member (cdr entry) '("PASS" "PENDING")))) implementations)))
+             (format "Implementation review %s finished with %s; rerun after resolving it." (car entry) (cdr entry))))
+          ((seq-some (lambda (entry) (equal (cdr entry) "PENDING")) implementations) "WAITING")
+          (t nil))))
 
 (defun design-review--start-review (block document &optional validated)
   "Queue BLOCK in the document's dedicated review conversation."
   (unless validated (setq validated (design-review--require-valid document)))
+  (when (and (equal (plist-get block :language) "test-review")
+             (not (plist-get document :test-gate)))
+    (user-error "Run the document check before test reviews; graph and implementation prerequisites are required"))
   (when (and (equal (plist-get block :language) "implementation-review")
              (not (plist-member document :checks)))
     (setf (plist-get document :path) buffer-file-name
@@ -275,15 +325,17 @@
                     :diagrams (when (equal (plist-get block :language) "diagram-review")
                                 (design-review--diagrams))
                     :language (plist-get block :language) :prompt prompt :text ""
-                    :submitted nil :subscription nil :group nil)))
+                    :submitted nil :subscription nil :group nil :outcome "UNKNOWN")))
     (puthash key run design-review--runs)
     (with-current-buffer shell
       (add-hook 'kill-buffer-hook #'design-review--interrupt-queue nil t)
       (setq design-review--queue (append design-review--queue (list run))))
     ;; Leave time for Babel to insert the running result before a fast reply.
     (run-at-time 0 nil #'design-review--advance shell)
-    (format "%s\nRUNNING: queued in dedicated review conversation %s. Results will replace this drawer."
-            (design-review--stamp) (buffer-name shell))))
+    (format "%s\n%s: queued in dedicated review conversation %s. Results will replace this drawer."
+            (design-review--stamp)
+            (if (equal (plist-get block :language) "test-review") "WAITING for graph and implementation PASS" "RUNNING")
+            (buffer-name shell))))
 
 (defun design-review--interrupt-queue ()
   "Finish every queued review when its conversation closes."
@@ -309,9 +361,10 @@
   "Execute the owned block at point, using only its review executor."
   (interactive)
   (let* ((block (design-review--block-at-point)) (document (design-review--document))
-         (result (if (equal (plist-get block :language) "design-graph")
-                     (design-review--check-graph block document)
-                   (design-review--start-review block document))))
+         (result (pcase (plist-get block :language)
+                   ("design-graph" (design-review--check-graph block document))
+                   ("test-review" (design-review--prepare-test block))
+                   (_ (design-review--start-review block document)))))
     (org-babel-insert-result result '("drawer" "replace"))
     result))
 
@@ -320,8 +373,15 @@
   (design-review--check-graph (design-review--block-at-point) (design-review--document)))
 
 (defun org-babel-execute:test-review (_body _params)
-  "Assess planned tests in the dedicated review conversation."
-  (design-review--start-review (design-review--block-at-point) (design-review--document)))
+  "Check prerequisites before assessing planned tests."
+  (design-review--prepare-test (design-review--block-at-point)))
+
+(defun design-review--prepare-test (block)
+  "Start background prerequisites and the requested test BLOCK."
+  (require 'design-review-async)
+  (let ((result (design-review--prepare "check" (plist-get block :id))))
+    (format "%s\n%s: graph and implementation checks must pass before test review.\n%s"
+            (design-review--stamp) (alist-get 'status result) (json-encode result))))
 
 (defun org-babel-execute:change-review (_body _params)
   "Assess changes outside the plan in the dedicated review conversation."

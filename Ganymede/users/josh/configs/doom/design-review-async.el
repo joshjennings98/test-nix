@@ -60,6 +60,22 @@
           (plist-get document :fingerprint) (alist-get 'fingerprint result)
           (plist-get document :path) buffer-file-name
           (plist-get document :authored-text) (plist-get job :snapshot))
+    (let ((implementations
+           (mapcar (lambda (block) (cons (plist-get block :id) "PENDING"))
+                   (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
+                               (plist-get job :blocks))))
+          blockers)
+      (dolist (graph (seq-filter (lambda (block) (equal (plist-get block :language) "design-graph"))
+                                (plist-get document :blocks)))
+        (let* ((id (plist-get graph :id))
+               (check (seq-find (lambda (check) (equal (alist-get 'id check) id)) (alist-get 'checks result)))
+               (verdict (alist-get 'status (alist-get 'result check))))
+          (unless (member verdict '("PASS" "UNASSESSED"))
+            (push (format "%s: %s" id (or verdict "not checked")) blockers))))
+      (setf (plist-get document :test-gate)
+            (list :implementations implementations
+                  :graph-blocker (when blockers
+                                   (concat "Graph checks did not pass (" (string-join (nreverse blockers) ", ") ").")))))
     (if (or (equal (plist-get job :command) "validate") (not (equal status "PASS")))
         (design-review--show-validation validation (plist-get job :source))
       (save-excursion
@@ -67,11 +83,17 @@
           (let* ((id (plist-get original :id))
                  (block (design-review--block id))
                  (text
-                  (if (equal (plist-get block :language) "design-graph")
+                  (cond ((equal (plist-get block :language) "design-graph")
                       (design-review--format-findings
                        (alist-get 'result (seq-find (lambda (check) (equal (alist-get 'id check) id))
-                                                   (append (alist-get 'checks result) nil))) document)
-                    (design-review--start-review block document validation))))
+                                                   (append (alist-get 'checks result) nil))) document))
+                        ((and (equal (plist-get block :language) "test-review")
+                              (or (plist-get (plist-get document :test-gate) :graph-blocker)
+                                  (not (plist-get (plist-get document :test-gate) :implementations))))
+                         (format "%s\nBLOCKED: test review not run. %s" (design-review--stamp)
+                                 (or (plist-get (plist-get document :test-gate) :graph-blocker)
+                                     "No implementation-review block is available.")))
+                        (t (design-review--start-review block document validation)))))
             (goto-char (plist-get block :begin))
             (org-babel-insert-result text '("drawer" "replace")))))
       (message "Graph checks finished; independent reviews queued for %s" (plist-get job :source)))))
@@ -107,6 +129,11 @@ Validate once.  Git and Go subprocesses run in the worker, never on the UI threa
       (let* ((document (design-review--document))
              (blocks (if id (list (or (design-review--block id) (user-error "No review block %s" id)))
                        (plist-get document :blocks)))
+             (implementations (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
+                                          (if (seq-some (lambda (block) (equal (plist-get block :language) "test-review")) blocks)
+                                              (plist-get document :blocks) blocks)))
+             (blocks (append implementations
+                             (seq-remove (lambda (block) (equal (plist-get block :language) "implementation-review")) blocks)))
              (job (list :status "RUNNING" :command command :buffer (current-buffer)
                         :source (or buffer-file-name (buffer-name)) :document document :blocks blocks
                         :snapshot (design-review--authored-text) :validation nil)))

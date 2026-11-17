@@ -36,8 +36,9 @@ for line in sys.stdin:
         pending = identifier
         prompt = "".join(item.get("text", "") for item in message["params"]["prompt"])
         if "REVIEW_JSON" in prompt:
-            chunk(json.dumps({"summary": "Fixture assessment", "findings": [
-                {"status": "REVIEW", "message": "Inspect the assertion", "file": "app.go", "line": 2}
+            implementation = "(implementation-review)\n\nTask:" in prompt
+            chunk(json.dumps({"status": "PASS" if implementation else "REVIEW", "summary": "Fixture assessment", "findings": [
+                {"status": "PASS" if implementation else "REVIEW", "message": "Inspect the assertion", "file": "app.go", "line": 2}
             ], "test_execution": "not run"}))
             reply(identifier, {"stopReason": "end_turn"})
             pending = None

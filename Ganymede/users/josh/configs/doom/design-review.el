@@ -351,7 +351,17 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
       (insert text)
       (org-mode)
       (org-babel-map-src-blocks nil (org-babel-remove-result))
-      (buffer-string))))
+      ;; Babel inserts a separator after blocks which previously had none.
+      ;; Canonicalise only that separator, preserving source bodies and prose.
+      (dolist (block (reverse (org-element-map (org-element-parse-buffer) 'src-block #'identity)))
+        (goto-char (org-element-property :end block))
+        (skip-chars-backward " \t\n")
+        (forward-line 1)
+        (let ((start (point)))
+          (while (looking-at "[ \t]*\n") (forward-line 1))
+          (delete-region start (point))
+          (insert "\n")))
+      (buffer-substring-no-properties (point-min) (point-max)))))
 
 (defun design-review--diagrams ()
   "Identify authored diagram blocks and image links in the whole document."

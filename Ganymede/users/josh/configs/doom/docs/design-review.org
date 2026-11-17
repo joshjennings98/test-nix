@@ -46,6 +46,24 @@ review. A PASS preparation status does not mean the implementation reviews pass.
 Authoring tools still validate their candidate before saving it. Individual
 Babel checks remain synchronous for their initial validation.
 
+* Feature review before test review
+
+Test-review prompts wait for all graph requirements and all implementation-review
+blocks in the run to pass. Implementation reviews run first regardless of where
+their blocks appear in the document. The implementation reviewer must return an
+explicit overall PASS with no non-PASS findings. FAIL, REVIEW, UNKNOWN, malformed
+responses, interruption and stale source or requirements block the test reviews.
+An advisory "checked — no concern" assessment does not turn a deterministic
+UNKNOWN into PASS and therefore does not unlock test reviews.
+
+Waiting test drawers explain the prerequisite. Blocked drawers say that the test
+review did not run and identify the reason. Fix the feature or analysis problem
+and rerun the check. Checking an individual test-review block also runs its graph
+and implementation prerequisites; it does not bypass the gate. A document without
+an implementation-review block cannot start test reviews. Context-only graph
+blocks have no requirements to pass. Diagram and out-of-plan reviews retain their
+own remit and are not gated by this test-review rule.
+
 * Unresolved findings and agent assessments
 
 An UNKNOWN graph finding includes its requirement, caller and target declarations,
