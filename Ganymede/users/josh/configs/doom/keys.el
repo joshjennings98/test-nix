@@ -20,6 +20,11 @@
          :desc "Check block" "c" #'design-review-check-block
          :desc "Check all / start reviews" "a" #'design-review-check-document)))
 
+(after! (org evil)
+  (evil-define-key '(normal motion visual) org-mode-map
+    [remap evil-next-line] #'evil-next-visual-line
+    [remap evil-previous-line] #'evil-previous-visual-line))
+
 (after! (org-fc evil)
   ;; The bundled demo still documents n as the flip key.
   (define-key org-fc-review-flip-mode-map (kbd "n") #'org-fc-review-flip)
@@ -95,6 +100,7 @@
        :desc "Send region" "S" #'agent-shell-send-region
        :desc "Send current file" "f" #'agent-shell-send-file
        :desc "Discuss inline" "p" #'agent-shell-inline
+       :desc "Continue latest inline chat here" "l" #'agent-shell-inline-continue-recent
        :desc "Visit / cycle inline previews" "P" #'agent-shell-inline-visit
        :desc "Message without switching" "m" #'agent-shell-inline-message
        :desc "Navigate preview" "n" #'agent-shell-inline-navigate

@@ -11,6 +11,49 @@
 (defvar-local agent-shell-completion-notify--subscription nil
   "Completion subscription for this shell.")
 
+(defvar-local agent-shell-completion-notify--request nil
+  "Token for the latest pending asynchronous notification request.")
+
+(defun agent-shell-completion-notify--close (id)
+  "Close ID without waiting for the notification daemon."
+  (dbus-call-method-asynchronously
+   :session notifications-service notifications-path notifications-interface
+   "CloseNotification" #'ignore :timeout 1000 :uint32 id))
+
+(defun agent-shell-completion-notify--notify (ready &rest params)
+  "Send PARAMS asynchronously and call READY with the notification ID.
+Use the reply's sender for signal dispatch, avoiding a synchronous owner query."
+  (dbus-call-method-asynchronously
+   :session notifications-service notifications-path notifications-interface
+   "Notify"
+   (lambda (id)
+     (when (integerp id)
+       (let ((key (list :session (dbus-event-service-name last-input-event) id)))
+         (unless notifications-on-action-object
+           (setq notifications-on-action-object
+                 (dbus-register-signal :session nil notifications-path notifications-interface
+                                       notifications-action-signal #'notifications-on-action-signal)))
+         (unless notifications-on-close-object
+           (setq notifications-on-close-object
+                 (dbus-register-signal :session nil notifications-path notifications-interface
+                                       notifications-closed-signal #'notifications-on-closed-signal)))
+         (push (list key (plist-get params :on-action)) notifications-on-action-map)
+         (push (list key (lambda (closed-id reason)
+                           (setq notifications-on-action-map
+                                 (assoc-delete-all key notifications-on-action-map))
+                           (funcall (plist-get params :on-close) closed-id reason)))
+               notifications-on-close-map)
+         (funcall ready id))))
+   :timeout 1000
+   :string (plist-get params :app-name)
+   :uint32 (or (plist-get params :replaces-id) 0)
+   :string "emacs"
+   :string (plist-get params :title)
+   :string (plist-get params :body)
+   `(:array ,@(plist-get params :actions))
+   '(:array (:dict-entry "urgency" (:variant :byte 1)))
+   :int32 (plist-get params :timeout)))
+
 (defun agent-shell-completion-notify--previews (shell)
   "Return live inline previews associated with SHELL."
   (let (previews)
@@ -38,11 +81,14 @@
 
 (defun agent-shell-completion-notify--dismiss (shell)
   "Close only SHELL's outstanding alert."
+  (when (buffer-live-p shell)
+    (with-current-buffer shell
+      (setq agent-shell-completion-notify--request nil)))
   (when-let* ((entry (assq shell agent-shell-completion-notify--pending)))
     (setq agent-shell-completion-notify--pending
           (assq-delete-all shell agent-shell-completion-notify--pending))
     (condition-case err
-        (notifications-close-notification (cdr entry))
+        (agent-shell-completion-notify--close (cdr entry))
       (error (message "Could not close agent notification: %s" (error-message-string err))))))
 
 (defun agent-shell-completion-notify--dismiss-viewed ()
@@ -60,7 +106,25 @@
         (progn
           (agent-shell-inline--show-live overlay)
           (agent-shell-inline--visit-preview overlay))
-      (pop-to-buffer-same-window shell)))
+      (pop-to-buffer-same-window shell))
+    ;; i3's smart activation policy does not switch to another workspace.
+    (when-let* (((eq window-system 'x))
+                (program (executable-find "i3-msg"))
+                (id (frame-parameter nil 'outer-window-id))
+                ((string-match-p "\\`[0-9]+\\'" id)))
+      (let ((socket (getenv "I3SOCK")))
+        (make-process
+         :name "agent-notification-focus" :buffer nil
+         :command (append (list program)
+                          (when (and socket (not (string-empty-p socket)))
+                            (list "-s" socket))
+                          (list (format "[id=%s] focus" id)))
+         :noquery t
+         :sentinel (lambda (process _event)
+                     (when (and (memq (process-status process) '(exit signal))
+                                (not (zerop (process-exit-status process))))
+                       (message "Could not focus Emacs through i3 (exit %s)"
+                                (process-exit-status process))))))))
   (agent-shell-completion-notify--dismiss shell))
 
 (defun agent-shell-completion-notify--finished (event)
@@ -70,23 +134,30 @@
     (unless (or (equal reason "cancelled")
                 (agent-shell-completion-notify--viewed-p shell))
       (condition-case err
-          (when-let* ((id
-                       (notifications-notify
-                        :app-name "Agent Shell"
-                        :title "Agent finished"
-                        :body (xml-escape-string
-                               (format "%s\nClick to view the response." (buffer-name shell)))
-                        :timeout 0
-                        :urgency 'normal
-                        :replaces-id (alist-get shell agent-shell-completion-notify--pending)
-                        :actions '("default" "View response")
-                        :on-action (lambda (_id _action)
-                                     (agent-shell-completion-notify--visit shell))
-                        :on-close (lambda (id _reason)
-                                    (when (equal id (alist-get shell agent-shell-completion-notify--pending))
-                                      (setq agent-shell-completion-notify--pending
-                                            (assq-delete-all shell agent-shell-completion-notify--pending)))))))
-            (setf (alist-get shell agent-shell-completion-notify--pending) id))
+          (let ((token (gensym "notification-")))
+            (setq agent-shell-completion-notify--request token)
+            (agent-shell-completion-notify--notify
+             (lambda (id)
+               (if (and (buffer-live-p shell)
+                        (eq token (buffer-local-value
+                                   'agent-shell-completion-notify--request shell))
+                        (not (agent-shell-completion-notify--viewed-p shell)))
+                   (setf (alist-get shell agent-shell-completion-notify--pending) id)
+                 (agent-shell-completion-notify--close id)))
+             :app-name "Agent Shell"
+             :title "Agent finished"
+             :body (xml-escape-string
+                    (format "%s\nClick to view the response." (buffer-name shell)))
+             :timeout 0
+             :urgency 'normal
+             :replaces-id (alist-get shell agent-shell-completion-notify--pending)
+             :actions '("default" "View response")
+             :on-action (lambda (_id _action)
+                          (run-at-time 0 nil #'agent-shell-completion-notify--visit shell))
+             :on-close (lambda (id _reason)
+                         (when (equal id (alist-get shell agent-shell-completion-notify--pending))
+                           (setq agent-shell-completion-notify--pending
+                                 (assq-delete-all shell agent-shell-completion-notify--pending))))))
         (error (message "Agent finished; notification unavailable: %s" (error-message-string err)))))))
 
 (defun agent-shell-completion-notify--clean-up ()

@@ -30,6 +30,53 @@ unimplemented proposals, but rejects malformed shapes, unknown symbols,
 invented existing relationships and contradictory requirements. Authoring commands
 validate the candidate document before saving it; rejected edits leave the file
 and the open buffer unchanged. Unrelated prose and unsaved notes are preserved.
+Interactive validation opens =*Design review validation*= below the document.
+It first shows RUNNING, then PASS or the problems to fix. Press =q= in that
+window to close it. Validation and check-all use a background process for Git
+and Go commands, so you can keep editing while they run. Check-all validates
+once and gathers the Git diff once before queuing the independent reviews.
+If you edit the plan during preparation, its result becomes STALE and no reviews
+are queued from that snapshot. Run the command again after your edits. Rerun
+after code changes too; the worker checks the code available while it runs.
+
+The MCP =validate-document= and =review-check= tools return RUNNING immediately.
+Poll =review-results=: its =preparation= field reports validation progress and
+findings; each block's =running= field includes background preparation and agent
+review. A PASS preparation status does not mean the implementation reviews pass.
+Authoring tools still validate their candidate before saving it. Individual
+Babel checks remain synchronous for their initial validation.
+
+* Unresolved findings and agent assessments
+
+An UNKNOWN graph finding includes its requirement, caller and target declarations,
+possible candidates, call expression when available, uncertainty reason and
+suggested inspection. Source and diff links let you inspect the deterministic
+evidence yourself. Candidates are possibilities, not proof of execution.
+Package or analysis failures are labelled Analysis blocked; other unresolved
+findings are labelled Review needed.
+
+The implementation review receives the current graph findings, including when
+you check only that review block. It can return a separate assessment for each
+finding: Checked — no concern found, Checked — concern found, or Inconclusive.
+The result keeps Analysis: UNKNOWN unchanged. An assessment is an agent's
+judgement, not verification or an override of the checker. The review conversation
+link identifies the reviewing session. Missing or duplicate assessments, missing
+citations and invalid local source references cannot produce a checked label.
+Blocked analysis cannot be dismissed as no concern.
+
+Evidence freshness is recorded separately. The snapshot hashes saved tracked and
+non-ignored untracked project files and authored requirements, excluding this
+document's generated results and Emacs lock files. Ignored files and dependencies
+outside the repository are outside the snapshot boundary. Save source buffers
+before reviewing. Project saves in Emacs invalidate open assessment labels;
+reopening a document, fetching MCP results, or following Check source freshness
+recomputes the snapshot. Edits outside Emacs are detected on those refreshes,
+not through continuous background polling. A stale assessment must be rerun.
+
+Interface method constraints exclude incompatible direct targets from gap
+assessment. Transitive paths and unresolved callbacks remain conservative.
+This does not attempt complete interface value-flow resolution or suppress
+reflection/callback uncertainty globally.
 
 * Graph blocks
 
@@ -75,15 +122,22 @@ relationship. =reaches= describes a call path, not runtime order.
 A test-review block contains behaviours and expectations:
 
 #+begin_example
-- TestInvalidName :: Reject empty and whitespace-only names
-  - Return a validation error.
-  - Make no storage write.
-  - Fail if validation is bypassed.
+TestInvalidName :: Reject empty and whitespace-only names
+- Return a validation error.
+- Make no storage write.
+- Fail if validation is bypassed.
 #+end_example
+
+Use one named =test-review= block per planned test. Each block keeps its behaviour,
+expectations and results together. Table-driven cases can stay in the same test
+block. Put short explanations before the block rather than repeating them inside
+every expectation.
+The test heading has no list marker. Older blocks with a top-level dash and
+indented expectations remain valid.
 
 The document uses one dedicated review conversation, separate from the
 implementation conversation. Review blocks queue as separate turns, with feedback
-returned to each block's results drawer. The template contains four focused reviews:
+returned to each block's results drawer. The available reviews are:
 - =test-review=: whether planned tests and new tests support the intended
   behaviours, including missing coverage and contradictory assertions.
 - =implementation-review=: whether the planned implementation matches the
@@ -106,6 +160,8 @@ to the review session, source locations and baseline-to-worktree Magit diffs nea
 the relevant hunk. Findings from agents are advisory. The read-only brief does not
 replace the selected agent's permissions; existing permission handling remains.
 An invalid final response or interrupted session yields UNKNOWN.
+Diff links show untracked files as additions without staging them. If a file has
+no content diff against the baseline, the link opens its source location instead.
 
 Results include a run time. There are no file watchers or automatic source
 invalidation. Rerun after changing code or the document. A callback will not replace
@@ -162,11 +218,19 @@ Use =$org-design-review= in Codex/Agent Shell after activating this configuratio
 The skill is distributed through =~/.agents/skills= and Codex's skill configuration.
 It creates or resumes the live Org document, keeps decisions and diagrams there,
 uses validated graph/test/context tools, and reads asynchronous review results.
+Generic planning skills route this workflow into that same document.
 
-=review-set-context= updates the complete Context and decisions section. Read the
-live document first and preserve existing notes. Use =**= or deeper subheadings.
-It preserves unrelated sections and unsaved edits and adds a diagram review block
-when an older document lacks one.
+=review-set-context= accepts an optional =before= block ID. Use it to place short
+paragraphs or lists immediately before that review block, under a =Notes for ID=
+heading. Read the live document first and send the complete revised context for
+that location. Adjacent context must not contain headings. The tool preserves the
+review block and its results.
+
+Omit =before= for document-wide context near the start. Use =**= or deeper headings
+there if needed. Keep local explanations beside their graph or test blocks.
+The tool adds a diagram review only when authored diagrams exist. Removing the
+last diagram through this tool also removes the unchanged generated diagram review.
+Custom review instructions are preserved.
 
 * Mermaid and focused diagram review
 

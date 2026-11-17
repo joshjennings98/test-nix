@@ -139,6 +139,9 @@ Contains at least the keys :marker, :reference-ov, and :response-ov.")
 (defvar-local agent-shell-inline--last nil
   "Last chat buffer used for `agent-shell-inline', buffer-local to the origin buffer.")
 
+(defvar agent-shell-inline--recent nil
+  "Inline conversations ordered by most recent message, across source buffers.")
+
 (defun agent-shell-inline--response-overlay-height ()
   "Compute the response overlay height from `agent-shell-inline-response-overlay-height'."
   (cl-etypecase agent-shell-inline-response-overlay-height
@@ -245,7 +248,13 @@ Returns a list of URL strings found in the region."
   "<mouse-4>"      #'agent-shell-inline--response-overlay-wheel
   "<wheel-up>"     #'agent-shell-inline--response-overlay-wheel
   "<mouse-5>"      #'agent-shell-inline--response-overlay-wheel
-  "<wheel-down>"   #'agent-shell-inline--response-overlay-wheel)
+  "<wheel-down>"   #'agent-shell-inline--response-overlay-wheel
+  "<wheel-left>"   #'ignore
+  "<wheel-right>"  #'ignore
+  "S-<wheel-up>"   #'ignore
+  "S-<wheel-down>" #'ignore
+  "S-<mouse-4>"    #'ignore
+  "S-<mouse-5>"    #'ignore)
 
 (defvar-keymap agent-shell-inline--response-overlay-mode-map
   :doc "Keymap used on response overlays."
@@ -337,58 +346,72 @@ Intended to be bound overlay-locally to a <down-mouse-1> EVENT."
                        (overlays-in (1- (window-start)) pos)))))
     (cl-find-if (lambda (ov) (overlay-get ov 'agent-shell-inline)) ovs)))
 
-(defun agent-shell-inline--skip-scroll-block (window direction)
-  "Move WINDOW past an inline preview blocking scrolling in DIRECTION."
-  (with-current-buffer (window-buffer window)
-    (let ((target
-           (save-excursion
-             (goto-char (window-start window))
-             (let* ((line-start (line-beginning-position))
-                    (line-end (line-end-position))
-                    (search-start (if (> direction 0) line-start
-                                    (line-beginning-position 0)))
-                    (previews (cl-remove-if-not
-                               (lambda (overlay)
-                                 (and (overlay-get overlay 'agent-shell-inline)
-                                      (overlay-get overlay 'after-string)))
-                               (overlays-in search-start (min (point-max) (1+ line-end)))))
-                    (boundary (when previews
-                                (apply (if (> direction 0) #'max #'min)
-                                       (mapcar (if (> direction 0) #'overlay-end #'overlay-start)
-                                               previews)))))
-               (when boundary
-                 (goto-char boundary)
-                 (forward-line direction)
-                 (point))))))
-      (when (and target
-                 (if (> direction 0) (> target (window-start window))
-                   (< target (window-start window))))
-        (set-window-point window target)
-        (set-window-vscroll window 0)
-        (set-window-start window target)))))
+(defun agent-shell-inline--measure-without-previews (previews measure &rest args)
+  "Call MEASURE with ARGS, excluding PREVIEWS' virtual rows temporarily."
+  (let ((strings (mapcar (lambda (overlay)
+                           (cons overlay (overlay-get overlay 'after-string)))
+                         previews)))
+    (unwind-protect
+        (progn
+          (dolist (entry strings) (overlay-put (car entry) 'after-string nil))
+          (apply measure args))
+      (dolist (entry strings) (overlay-put (car entry) 'after-string (cdr entry))))))
 
-(defun agent-shell-inline--scroll-document (scroll event &rest args)
-  "Call SCROLL with EVENT and ARGS, escaping a stalled inline display block."
-  (let* ((kind (event-basic-type event))
-         (vertical (and (memq kind '(mouse-4 mouse-5 wheel-up wheel-down))
-                        (not (memq 'shift (event-modifiers event)))))
-         (window (and vertical (mouse-wheel--get-scroll-window event)))
-         (active (and (window-live-p window)
-                      (buffer-local-value 'agent-shell-inline--response-overlay-mode
-                                          (window-buffer window))))
-         (start (and active (window-start window)))
-         (offset (and active (window-vscroll window t))))
-    (prog1 (apply scroll event args)
-      (when (and active (window-live-p window)
-                 (buffer-local-value 'agent-shell-inline--response-overlay-mode
-                                     (window-buffer window)))
-        (redisplay t)
-        (when (and (= start (window-start window))
-                   (= offset (window-vscroll window t)))
-          (agent-shell-inline--skip-scroll-block
-           window (if (memq kind '(mouse-4 wheel-up)) -1 1)))))))
-
-(advice-add 'mwheel-scroll :around #'agent-shell-inline--scroll-document)
+(defun agent-shell-inline--scroll-down-position (scroll delta)
+  "Call SCROLL by DELTA without resetting pixels at a preview's anchor."
+  (if (not agent-shell-inline--response-overlay-mode)
+      (funcall scroll delta)
+    (let* ((start (window-start))
+           (end (save-excursion (goto-char start) (line-end-position)))
+           (previews (cl-remove-if-not
+                      (lambda (overlay)
+                        (and (overlay-get overlay 'agent-shell-inline)
+                             (overlay-get overlay 'after-string)))
+                      (overlays-in start (min (point-max) (1+ end)))))
+           (position (symbol-function 'posn-at-point)))
+      (if (not previews)
+          (funcall scroll delta)
+        (cl-letf (((symbol-function 'posn-at-point)
+                   (lambda (&optional pos window)
+                     (if (and pos (> pos start)
+                              (seq-some (lambda (overlay) (= pos (overlay-end overlay))) previews))
+                         ;; String rows all map to the anchor.  Measure its
+                         ;; actual text row, including wrapped source lines.
+                         (list (or window (selected-window)) pos
+                               (cons 0 (cdr (agent-shell-inline--measure-without-previews
+                                             (seq-filter (lambda (overlay) (= pos (overlay-end overlay))) previews)
+                                             #'window-text-pixel-size
+                                             window start pos nil nil nil t)))
+                               0)
+                       (funcall position pos window)))))
+          (funcall scroll delta))))))
+(defun agent-shell-inline--scroll-up-measure (scroll delta)
+  "Call SCROLL by DELTA without counting an already traversed preview twice."
+  (let* ((start (window-start))
+         (previews (and agent-shell-inline--response-overlay-mode
+                        (> delta (window-vscroll nil t))
+                        (cl-remove-if-not
+                         (lambda (overlay)
+                           (and (overlay-get overlay 'agent-shell-inline)
+                                (= (overlay-end overlay) start)
+                                (overlay-get overlay 'after-string)))
+                         (overlays-in (max (point-min) (1- start)) (min (point-max) (1+ start)))))))
+    (if (not previews)
+        (funcall scroll delta)
+      (let ((measure (symbol-function 'window-text-pixel-size)))
+        (cl-letf (((symbol-function 'window-text-pixel-size)
+                   (lambda (&rest args)
+                     (if (and (consp (nth 1 args))
+                              (equal (car (nth 1 args)) start)
+                              (equal (nth 2 args) start))
+                         (apply #'agent-shell-inline--measure-without-previews previews measure args)
+                       (apply measure args)))))
+          (funcall scroll delta))))))
+(with-eval-after-load 'pixel-scroll
+  (advice-add 'pixel-scroll-precision-scroll-down-page :around
+              #'agent-shell-inline--scroll-down-position)
+  (advice-add 'pixel-scroll-precision-scroll-up-page :around
+              #'agent-shell-inline--scroll-up-measure))
 
 (defun agent-shell-inline--move-past-preview (move count &rest args)
   "Retry stalled line MOVE past an inline preview using buffer lines.
@@ -410,7 +433,7 @@ Normal visual movement, including Magit's selection handling, runs first."
 (advice-add 'line-move :around #'agent-shell-inline--move-past-preview)
 
 (defun agent-shell-inline--response-overlay-wheel (event)
-  "Scroll only the reply under EVENT, stopping at its boundaries."
+  "Scroll only the reply under EVENT, clamping at either end."
   (interactive "e")
   (let* ((last-input-event event)
          (overlay (agent-shell-inline--response-overlay-at-point))
@@ -608,9 +631,11 @@ Create a shell without displaying it when the project has no conversation."
            (agent-shell-inline--update-response-overlay (map-elt data :text-chunk) overlay)))
         ('tool-call-update
          (unless (overlay-get overlay 'agent-shell-inline-review)
-           (overlay-put overlay 'agent-shell-inline-status
-                        (format "Tool: %s" (or (map-nested-elt data '(:tool-call :title))
-                                               "working")))))
+           (let* ((title (or (map-nested-elt data '(:tool-call :title)) "working"))
+                  (preview (replace-regexp-in-string
+                            "[\n\r\t]+" " " (substring title 0 (min 160 (length title))))))
+             (overlay-put overlay 'agent-shell-inline-status
+                          (format "Tool: %s" (truncate-string-to-width preview 100 nil nil "…"))))))
         ((or 'permission-request 'elicitation-request)
          (overlay-put overlay 'agent-shell-inline-review kind)
          (overlay-put overlay 'agent-shell-inline-status "Review required — SPC a v")
@@ -669,6 +694,8 @@ Create a shell without displaying it when the project has no conversation."
         (error
          (agent-shell-inline-clear-response-overlay overlay)
          (signal (car err) (cdr err))))
+      (setq agent-shell-inline--recent
+            (cons shell (delq shell agent-shell-inline--recent)))
       overlay)))
 
 ;;;; Overlay presentation and lifecycle
@@ -897,29 +924,45 @@ Esc or q exits.  Any other editing command exits and runs normally."
           (agent-shell-inline--response-overlay-render overlay)))))
     (message "j/k scroll · J/K newer/older · C-d/C-u page · g live · Esc/q exit")))
 
+(defun agent-shell-inline--preview-width (overlay)
+  "Return the available column width for OVERLAY's display."
+  (let ((windows (get-buffer-window-list (overlay-buffer overlay) nil t)))
+    (max 1 (1- (if windows
+                   (apply #'min (mapcar #'window-body-width windows))
+                 (window-body-width))))))
+
+(defun agent-shell-inline--wrap-lines (text width)
+  "Wrap display TEXT to WIDTH columns, retaining its text properties."
+  (let (lines)
+    (dolist (line (split-string text "\n"))
+      (while (> (string-width line) width)
+        (let* ((prefix (truncate-string-to-width line width))
+               (cut (max 1 (length prefix))))
+          (when (and (string-match "[ \t]+[^ \t]*\\'" prefix)
+                     (> (match-beginning 0) 0))
+            (setq cut (match-beginning 0)))
+          (push (substring line 0 cut) lines)
+          (setq line (substring line cut))
+          (when (string-match "\\`[ \t]+" line)
+            (setq line (substring line (match-end 0))))))
+      (push line lines))
+    (nreverse lines)))
+
 (defun agent-shell-inline--response-lines (overlay)
   "Return fontified response lines wrapped to OVERLAY's visible window width.
 Only the display copy is wrapped; the response buffer retains the agent's text."
   (let* ((source (agent-shell-inline--display-source overlay))
-         (windows (get-buffer-window-list (overlay-buffer overlay) nil t))
-         (width (max 1 (1- (if windows
-                              (apply #'min (mapcar #'window-body-width windows))
-                            (window-body-width)))))
-         lines)
-    (when (buffer-live-p source)
-      (dolist (line (split-string (with-current-buffer source (buffer-string)) "\n"))
-        (while (> (string-width line) width)
-          (let* ((prefix (truncate-string-to-width line width))
-                 (cut (max 1 (length prefix))))
-            (when (and (string-match "[ \t]+[^ \t]*\\'" prefix)
-                       (> (match-beginning 0) 0))
-              (setq cut (match-beginning 0)))
-            (push (substring line 0 cut) lines)
-            (setq line (substring line cut))
-            (when (string-match "\\`[ \t]+" line)
-              (setq line (substring line (match-end 0))))))
-        (push line lines)))
-    (nreverse lines)))
+         (width (agent-shell-inline--preview-width overlay))
+         (key (when (buffer-live-p source)
+                (list source (buffer-modified-tick source) width)))
+         (cached (overlay-get overlay 'agent-shell-inline-wrapped-lines)))
+    (if (and cached (equal key (car cached)))
+        (cdr cached)
+      (let ((lines (when (buffer-live-p source)
+                     (agent-shell-inline--wrap-lines
+                      (with-current-buffer source (buffer-string)) width))))
+        (overlay-put overlay 'agent-shell-inline-wrapped-lines (cons key lines))
+        lines))))
 
 (defun agent-shell-inline--render-source-previews (&rest _)
   "Refresh inline wrapping after the source window layout changes."
@@ -944,17 +987,23 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
                    (concat
                     (propertize agent-shell-inline--hrule
                                 'keymap agent-shell-inline-response-overlay-map)
-                    (agent-shell-inline--response-overlay-header
-                     overlay (if (> index 0) "↑ " "")
-                     (if (< (+ index height) lines) "↓ " ""))
+                    (mapconcat #'identity
+                               (agent-shell-inline--wrap-lines
+                                (agent-shell-inline--response-overlay-header
+                                 overlay (if (> index 0) "↑ " "")
+                                 (if (< (+ index height) lines) "↓ " ""))
+                                (agent-shell-inline--preview-width overlay))
+                               "\n")
                    (propertize
                     (concat "\n" text agent-shell-inline--hrule
                             (let* ((shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer))
                                    (name (or (and (buffer-live-p shell) (buffer-name shell))
                                              "Closed conversation")))
-                              (concat (propertize " " 'display
-                                                  `(space :align-to (- right ,(1+ (string-width name)))))
-                                      (propertize name 'face 'shadow))))
+                              (mapconcat #'identity
+                                         (agent-shell-inline--wrap-lines
+                                          (propertize name 'face 'shadow)
+                                          (agent-shell-inline--preview-width overlay))
+                                         "\n")))
                     'keymap agent-shell-inline-response-overlay-map
                     'pointer 'hand))))))
 
@@ -1192,6 +1241,22 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
       (set-marker marker nil))))
 
 ;;;###autoload
+(defun agent-shell-inline-continue-recent ()
+  "Compose at point in the most recently used live inline conversation.
+Reuse its history across source buffers without creating a new conversation."
+  (interactive)
+  (setq agent-shell-inline--recent
+        (seq-filter #'agent-shell-inline--shell-p agent-shell-inline--recent))
+  (let ((shell (or (car agent-shell-inline--recent)
+                   ;; Recover associations when loaded into an existing Emacs.
+                   (seq-some (lambda (buffer)
+                               (let ((last (buffer-local-value 'agent-shell-inline--last buffer)))
+                                 (and (agent-shell-inline--shell-p last) last)))
+                             (buffer-list)))))
+    (unless shell (user-error "No previous inline conversation is open; use SPC a p first"))
+    (agent-shell-inline nil shell)))
+
+;;;###autoload
 (defun agent-shell-inline (&optional continue-overlay shell)
   "Compose inline, reusing SHELL or the source's project conversation.
 With a prefix argument, reuse the nearest CONTINUE-OVERLAY for a follow-up."
@@ -1239,6 +1304,7 @@ With a prefix argument, reuse the nearest CONTINUE-OVERLAY for a follow-up."
 (defun agent-shell-inline--visit-preview (overlay)
   "Visit OVERLAY and centre its response in the selected window."
   (pop-to-buffer-same-window (overlay-buffer overlay))
+  (set-window-hscroll nil 0)
   (goto-char (overlay-start overlay))
   (agent-shell-inline--response-overlay-render overlay)
   (let ((height (1+ (cl-count ?\n (or (overlay-get overlay 'after-string) "")))))

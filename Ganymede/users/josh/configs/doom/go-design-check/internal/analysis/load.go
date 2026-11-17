@@ -93,6 +93,7 @@ func Load(ctx context.Context, opts Options) (graph *Graph, err error) {
 	if err != nil {
 		return
 	}
+	graph.Objects = objects
 
 	if err = collectRelationships(ctx, graph, all, objects, opts.Root); err != nil {
 		return

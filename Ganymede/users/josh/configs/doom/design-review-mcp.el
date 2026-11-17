@@ -1,6 +1,7 @@
 ;;; design-review-mcp.el --- Review operations on the existing MCP server -*- lexical-binding: t; -*-
 
 (require 'design-review-execution)
+(require 'design-review-async)
 
 (declare-function make-mcp-server-tool "mcp-server")
 (declare-function mcp-server-register-tool "mcp-server")
@@ -19,11 +20,12 @@
 (defun design-review-mcp-validate (args)
   (design-review--keys args '(path))
   (with-current-buffer (design-review--buffer (alist-get 'path args))
-    (json-encode (design-review-validate-document))))
+    (json-encode (design-review--prepare "validate"))))
 
 (defun design-review-mcp-set-context (args)
-  (design-review--keys args '(path body))
-  (json-encode (design-review-set-context (alist-get 'path args) (alist-get 'body args))))
+  (design-review--keys args '(path body before))
+  (json-encode (design-review-set-context (alist-get 'path args) (alist-get 'body args)
+                                          (alist-get 'before args))))
 
 (defun design-review-mcp-set-graph (args)
   (design-review--keys args '(path id graph))
@@ -41,9 +43,10 @@
         (when (member name names) (user-error "Duplicate test %s" name))
         (push name names)
         (unless expectations (user-error "Test %s requires explicit expectations" name))
-        (push (format "- %s :: %s" name description) lines)
+        (when lines (push "" lines))
+        (push (format "%s :: %s" name description) lines)
         (dolist (expectation expectations)
-          (push (format "  - %s" (design-review--line expectation "Expectation")) lines))))
+          (push (format "- %s" (design-review--line expectation "Expectation")) lines))))
     (unless lines (user-error "Provide at least one planned test"))
     (json-encode (design-review-set-block (alist-get 'path args) (alist-get 'id args) "test-review"
                                          (string-join (nreverse lines) "\n") "Tests and behaviours"))))
@@ -51,20 +54,12 @@
 (defun design-review-mcp-check (args)
   (design-review--keys args '(path id))
   (with-current-buffer (design-review--buffer (alist-get 'path args))
-    (let* ((document (design-review--document))
-           (id (alist-get 'id args))
-           (ids (if id (list id) (mapcar (lambda (block) (plist-get block :id)) (plist-get document :blocks))))
-           results)
-      (save-excursion
-        (dolist (name ids)
-          (let ((block (or (design-review--block name) (user-error "No review block %s" name))))
-            (goto-char (plist-get block :begin))
-            (push `((id . ,name) (result . ,(design-review-check-block))) results))))
-      (json-encode `((results . ,(vconcat (nreverse results))))))))
+    (json-encode (design-review--prepare "check" (alist-get 'id args)))))
 
 (defun design-review-mcp-results (args)
   (design-review--keys args '(path))
   (with-current-buffer (design-review--buffer (alist-get 'path args))
+    (design-review-refresh-evidence)
     (let (results)
       (save-excursion
         (dolist (block (plist-get (design-review--document) :blocks))
@@ -72,12 +67,18 @@
           (let ((position (org-babel-where-is-src-block-result))
                 (id (plist-get block :id)))
             (push `((id . ,id)
-                    (running . ,(if (gethash (cons (current-buffer) id) design-review--runs) t :json-false))
+                    (running . ,(if (or (gethash (cons (current-buffer) id) design-review--runs)
+                                        (and (equal (plist-get design-review--preparation :status) "RUNNING")
+                                             (equal (plist-get design-review--preparation :command) "check")
+                                             (seq-some (lambda (block) (equal (plist-get block :id) id))
+                                                       (plist-get design-review--preparation :blocks)))) t :json-false))
                     (result . ,(if position
                                    (progn (goto-char position)
                                           (buffer-substring-no-properties position (org-babel-result-end)))
                                  "Not checked."))) results))))
-      (json-encode `((results . ,(vconcat (nreverse results))))))))
+      (json-encode `((preparation . ((status . ,(or (plist-get design-review--preparation :status) "IDLE"))
+                                    (validation . ,(plist-get design-review--preparation :validation))))
+                     (results . ,(vconcat (nreverse results))))))))
 
 (defun design-review-check-document ()
   "Check graphs and queue the focused agent reviews."
@@ -114,11 +115,11 @@
              "Read the live Org document, including unsaved manual edits and results. Use before refining an existing block."
              ((path . ,path)) ["path"] design-review-mcp-read)
             ("validate-document" "Validate review document"
-             "Validate Org structure, IDs, cross-block proposals, declaration types and baseline graph claims. Does NOT run Babel, tests, agents or require proposed changes to be implemented."
+             "Validate Org structure, IDs, cross-block proposals, declaration types and baseline graph claims in the background. Returns RUNNING; poll review-results preparation until PASS, ERROR or STALE. Does NOT run Babel, tests, agents or require proposed changes to be implemented."
              ((path . ,path)) ["path"] design-review-mcp-validate)
             ("review-set-context" "Update planning context and diagrams"
-             "Replace the Context and decisions section with Org text, preserving other sections and live unsaved edits. Read first and send the complete revised section. Use ** or deeper subheadings; Mermaid blocks, prose and examples belong here. Use dedicated tools for graph/test blocks. Validates the document before saving; does not render diagrams or run reviews."
-             ((path . ,path) (body . ,text)) ["path" "body"] design-review-mcp-set-context)
+             "Replace context with Org text. Set before to an existing review block ID to place short paragraphs, lists or diagrams immediately before that block; omit it for document-wide Context and decisions. Read first and send the complete revised context for that location, preserving user notes. Adjacent context must not contain headings. Use dedicated tools for graph/test blocks. Preserves review blocks and their results. Adds diagram review only when diagrams exist. Validates before saving; does not render or run reviews."
+             ((path . ,path) (body . ,text) (before . ,id)) ["path" "body"] design-review-mcp-set-context)
             ("review-set-graph" "Add or replace graph block"
              "Upsert one named graph block. Unmarked nodes are context; add/remove/preserve children define requirements. Every child needs an explicit relation. New symbols need declarations; signatures describe Go shapes without bodies. Full-document validation happens before saving; failure leaves the document unchanged. Reuse the ID to refine a block."
              ((path . ,path) (id . ,id)
@@ -127,7 +128,7 @@
                                        (declarations . ((type . "array") (items . ,declaration))))))))
              ["path" "id" "graph"] design-review-mcp-set-graph)
             ("review-set-tests" "Add or replace planned tests"
-             "Upsert a named test-review block with behaviours and explicit expectations. Validates the document before saving; does not run tests or launch a reviewer."
+             "Upsert a named test-review block with behaviours and explicit expectations. Prefer one test per block so each has its own Babel results; use separate calls and stable IDs for separate tests. Validates the document before saving; does not run tests or launch a reviewer."
              ((path . ,path) (id . ,id)
               (tests . ((type . "array") (minItems . 1)
                         (items . ((type . "object") (additionalProperties . :false)
@@ -136,10 +137,10 @@
                                   (required . ["name" "description" "expectations"]))))))
              ["path" "id" "tests"] design-review-mcp-set-tests)
             ("review-check" "Execute review blocks"
-             "Explicitly execute one named block, or all review blocks when id is omitted. Graph blocks check current code; test/implementation/diagram/change blocks queue in one dedicated review conversation, separate from the implementation conversation. Results appear in Org; use review-results for asynchronous completion."
+             "Start background validation and graph checks for one named block, or all review blocks when id is omitted. Returns RUNNING immediately. Validates once, then queues test/implementation/diagram/change reviews in one dedicated conversation. Poll review-results for preparation status and block completion. Plan edits during preparation discard the pending results; rerun after edits."
              ((path . ,path) (id . ,id)) ["path"] design-review-mcp-check)
             ("review-results" "Read check results"
-             "Read the current result drawers and which independent assessments are still running. Results describe their recorded run time; rerun after code or plan edits."
+             "Read preparation status, its validation result, current result drawers and which checks or independent assessments are still running. Preparation PASS means validation completed, not that all reviews passed. Results describe their recorded run time; rerun after code or plan edits."
              ((path . ,path)) ["path"] design-review-mcp-results)))
          enabled)
     (dolist (entry entries)

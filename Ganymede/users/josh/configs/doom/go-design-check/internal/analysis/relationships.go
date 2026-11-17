@@ -1,9 +1,11 @@
 package analysis
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/types"
 	"maps"
 	"slices"
@@ -60,6 +62,19 @@ func collectRelationships(ctx context.Context, graph *Graph, all map[string]*pac
 					}
 
 					loc := location(pkg.Fset, call.Lparen, root)
+					firstGap := len(graph.Gaps)
+					defer func() {
+						if firstGap == len(graph.Gaps) {
+							return
+						}
+						var expression bytes.Buffer
+						if subErr := format.Node(&expression, pkg.Fset, call); subErr != nil {
+							return
+						}
+						for i := firstGap; i < len(graph.Gaps); i++ {
+							graph.Gaps[i].Expression = expression.String()
+						}
+					}()
 					target, resolved := callee.(*types.Func)
 					if !resolved {
 						graph.Gaps = append(graph.Gaps, Gap{From: from, Reason: "unresolved function value or callback", Location: loc})
@@ -68,7 +83,7 @@ func collectRelationships(ctx context.Context, graph *Graph, all map[string]*pac
 
 					to := Symbol(target)
 					if to == "" {
-						graph.Gaps = append(graph.Gaps, Gap{From: from, Reason: "dispatch through a predeclared interface", Location: loc})
+						graph.Gaps = append(graph.Gaps, interfaceGap(from, "dispatch through a predeclared interface", target, loc))
 						return true
 					}
 
@@ -81,7 +96,7 @@ func collectRelationships(ctx context.Context, graph *Graph, all map[string]*pac
 					if sig.Recv() != nil {
 						if _, isInterface := sig.Recv().Type().Underlying().(*types.Interface); isInterface {
 							kind = "possible_call"
-							graph.Gaps = append(graph.Gaps, Gap{From: from, Reason: "interface dispatch has conservative candidate targets", Location: loc})
+							graph.Gaps = append(graph.Gaps, interfaceGap(from, "interface dispatch has conservative candidate targets", target, loc))
 						}
 					}
 

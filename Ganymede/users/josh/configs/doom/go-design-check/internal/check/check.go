@@ -79,6 +79,11 @@ func Evaluate(ctx context.Context, request Request, graph *analysis.Graph) (resu
 
 func evaluateRule(graph *analysis.Graph, rule Rule) (finding Finding) {
 	finding = Finding{ID: rule.ID, Status: Pass}
+	defer func() {
+		if finding.Status == Unknown {
+			finding.Review = reviewContext(graph, rule, finding.Gaps)
+		}
+	}()
 	if rule.Symbol != "" {
 		return declaration(graph, rule)
 	}
@@ -104,7 +109,8 @@ func evaluateRule(graph *analysis.Graph, rule Rule) (finding Finding) {
 	}
 
 	var definite, possible []string
-	gap := graph.RelationshipGap(from, rule.Kind)
+	gaps := graph.RelationshipGaps(from, rule.To, rule.Kind)
+	gap := len(gaps) > 0
 	switch rule.Kind {
 	case "reaches", "forbid_path":
 		definite = graph.Path(rule.From, rule.To, false)
@@ -162,11 +168,7 @@ func evaluateRule(graph *analysis.Graph, rule Rule) (finding Finding) {
 	}
 
 	if finding.Status == Unknown {
-		for _, item := range graph.Gaps {
-			if item.From == from || ((rule.Kind == "reaches" || rule.Kind == "forbid_path") && len(graph.Path(from, item.From, true)) > 0) {
-				finding.Gaps = append(finding.Gaps, item)
-			}
-		}
+		finding.Gaps = gaps
 	}
 
 	return

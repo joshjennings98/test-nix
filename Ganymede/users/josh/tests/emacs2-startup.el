@@ -3,6 +3,12 @@
 (require 'ert)
 (require 'cl-lib)
 
+(ert-deftest emacs2-agent-workflow-loads-on-demand ()
+  (should-not (featurep 'agent-shell))
+  (should (autoloadp (symbol-function 'agent-shell-inline)))
+  (should (autoloadp (symbol-function 'org-babel-execute:design-graph)))
+  (should (commandp (lookup-key emacs2-leader-map (kbd "a p")))))
+
 (ert-deftest emacs2-project-trust-is-explicit-and-persisted ()
   (require 'flymake)
   (let* ((emacs2-projects-directory (make-temp-file "emacs2-trust-" t))

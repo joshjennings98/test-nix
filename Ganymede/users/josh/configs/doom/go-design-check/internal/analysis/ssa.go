@@ -96,7 +96,11 @@ func addSSA(ctx context.Context, g *Graph, roots []*packages.Package, root strin
 				loc := location(program.Fset, call.Common().Pos(), root)
 				callee := call.Common().StaticCallee()
 				if callee == nil {
-					g.Gaps = append(g.Gaps, Gap{From: from, Reason: "unresolved function value or callback", Location: loc})
+					if call.Common().IsInvoke() {
+						g.Gaps = append(g.Gaps, interfaceGap(from, "interface dispatch has conservative candidate targets", call.Common().Method, loc))
+					} else {
+						g.Gaps = append(g.Gaps, Gap{From: from, Reason: "unresolved function value or callback", Location: loc})
+					}
 					continue
 				}
 

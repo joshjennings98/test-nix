@@ -26,12 +26,23 @@ type Request struct {
 }
 
 type Finding struct {
+	Review    *ReviewContext      `json:"review,omitempty"`
 	ID        string              `json:"id"`
 	Status    Status              `json:"status"`
 	Message   string              `json:"message"`
 	Witness   []string            `json:"witness,omitempty"`
 	Locations []analysis.Location `json:"locations,omitempty"`
 	Gaps      []analysis.Gap      `json:"gaps,omitempty"`
+}
+
+type ReviewContext struct {
+	Kind        string          `json:"kind"`
+	Requirement Rule            `json:"requirement"`
+	Caller      analysis.Node   `json:"caller"`
+	Target      analysis.Node   `json:"target"`
+	Candidates  []analysis.Node `json:"candidates,omitempty"`
+	Guidance    []string        `json:"guidance"`
+	Diagnostics []string        `json:"diagnostics,omitempty"`
 }
 
 type Result struct {

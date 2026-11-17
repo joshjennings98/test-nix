@@ -126,6 +126,48 @@
         (should (eq (current-buffer) source))
         (should-not (get-buffer-window shell))))))
 
+(ert-deftest josh/inline-continue-recent-keeps-conversation-across-files ()
+  (let (agent-shell-inline--recent)
+    (josh/with-inline-agent
+      (let ((first (agent-shell-inline-message "first request" shell))
+            (document (generate-new-buffer " *inline-review-document*")))
+        (unwind-protect
+            (progn
+              (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get first 'agent-shell-inline-status))))
+              (should (eq (car agent-shell-inline--recent) shell))
+              (switch-to-buffer document)
+              (org-mode)
+              (insert "* Design review\n")
+              (let ((closed (generate-new-buffer " *closed-inline-chat*")))
+                (kill-buffer closed)
+                (push closed agent-shell-inline--recent))
+              (cl-letf (((symbol-function 'agent-shell--new-shell)
+                         (lambda (&rest _) (ert-fail "Created another conversation"))))
+                (agent-shell-inline-continue-recent)
+                (should (eq (plist-get agent-shell-inline--context :buffer) shell))
+                (should (eq (marker-buffer (plist-get agent-shell-inline--context :marker)) document))
+                (insert "follow-up from review")
+                (agent-shell-inline-send))
+              (should (eq (current-buffer) document))
+              (let ((second (agent-shell-inline--response-overlay-at-point)))
+                (should (eq (overlay-buffer second) document))
+                (should (eq (overlay-buffer first) source))
+                (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get second 'agent-shell-inline-status)))))
+              (should (equal agent-shell-inline--recent (list shell)))
+              (with-current-buffer shell
+                (should (string-match-p "first request" (buffer-string)))
+                (should (string-match-p "follow-up from review" (buffer-string)))))
+          (kill-buffer document))))))
+
+(ert-deftest josh/inline-continue-recent-without-history-does-not-create-chat ()
+  (with-temp-buffer
+    (let ((agent-shell-inline--recent nil)
+          (buffer (current-buffer)))
+      (cl-letf (((symbol-function 'buffer-list) (lambda (&rest _) (list buffer)))
+                ((symbol-function 'agent-shell--new-shell)
+                 (lambda (&rest _) (ert-fail "Created a conversation without history"))))
+        (should-error (agent-shell-inline-continue-recent) :type 'user-error)))))
+
 (ert-deftest josh/inline-source-context-and-append ()
   (josh/with-inline-agent
     (josh/inline-wait (lambda () (agent-shell-initialized-p :shell-buffer shell)))
@@ -252,6 +294,13 @@
         (dolist (line (agent-shell-inline--response-lines overlay))
           (should (<= (string-width line) width)))
         (should (> (length (agent-shell-inline--response-lines overlay)) 3))
+        (let ((wrapped (agent-shell-inline--response-lines overlay)))
+          (should (eq wrapped (agent-shell-inline--response-lines overlay)))
+          (agent-shell-inline--on-event
+           overlay `((:event . tool-call-update)
+                     (:data . ((:tool-call . ((:title . ,(make-string 10000 ?x))))))))
+          (should (< (length (overlay-get overlay 'agent-shell-inline-status)) 110))
+          (should (eq wrapped (agent-shell-inline--response-lines overlay))))
         (let ((window (split-window-right)))
           (unwind-protect
               (progn
@@ -263,6 +312,16 @@
             (delete-window window)))
         (agent-shell-inline-copy-response)
         (should (equal (current-kill 0) raw))
+        (overlay-put overlay 'agent-shell-inline-header (make-string 300 ?h))
+        (with-current-buffer shell (rename-buffer (make-string 300 ?s) t))
+        (agent-shell-inline--response-overlay-render overlay)
+        (dolist (line (split-string (overlay-get overlay 'after-string) "\n"))
+          (should (<= (string-width line) width)))
+        (set-window-hscroll nil 5)
+        (agent-shell-inline--visit-preview overlay)
+        (should (= (window-hscroll) 0))
+        (dolist (key '("<wheel-left>" "<wheel-right>" "S-<wheel-up>" "S-<wheel-down>"))
+          (should (eq (lookup-key agent-shell-inline-response-overlay-map (kbd key)) #'ignore)))
         (should (equal (with-current-buffer preview (buffer-string)) raw))))))
 
 (ert-deftest josh/inline-send-clears-cycled-highlight ()

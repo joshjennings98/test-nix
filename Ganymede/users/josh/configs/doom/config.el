@@ -10,6 +10,11 @@
 (setq custom-file (expand-file-name "custom.el" doom-state-dir))
 (load custom-file 'noerror 'nomessage)
 
+(setq pixel-scroll-precision-interpolate-mice t)
+(pixel-scroll-precision-mode 1)
+
+(add-hook 'org-mode-hook #'visual-line-mode)
+
 (after! projectile
   (add-to-list 'projectile-project-search-path (expand-file-name "~/Documents/"))
   (setq projectile-auto-discover t))
@@ -23,9 +28,12 @@
 (load! "agent-shell-permission-transient")
 (agent-shell-permission-transient-mode 1)
 (load! "agent-shell-inline")
+(load! "agent-shell-output-limit")
 (load! "agent-shell-completion-notify")
 (load! "design-review")
+(load! "design-review-evidence")
 (load! "design-review-execution")
+(load! "design-review-async")
 (load! "design-review-mcp")
 (load! "org-mermaid")
 (load! "agent-shell-navigation")
@@ -66,7 +74,8 @@
              agent-shell-send-other-file agent-shell-send-clipboard-image
              agent-shell-send-screenshot agent-shell-new-worktree-shell)
   :config
-  (setq agent-shell-preferred-agent-config 'codex)
+  (setq agent-shell-preferred-agent-config 'codex
+        agent-shell-inhibit-system-sleep nil)
   (add-to-list 'agent-shell-mcp-servers
                '((name . "emacs-navigation")
                  (command . (lambda () (or (executable-find "socat")

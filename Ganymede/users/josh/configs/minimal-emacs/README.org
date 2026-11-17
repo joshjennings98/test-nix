@@ -4,6 +4,11 @@ This is the standalone, Nix-managed minimal-emacs.d configuration, alongside
 the existing Doom setup. Run =emacs2= from a shell or select it in the launcher.
 Its desktop entry is also named =emacs2=.
 
+Agent Shell and the complete Org design-review workflow are included. See
+=agents.org= for the bindings, package sources, persisted state and tests.
+The extension libraries and Go checker are shared with =configs/doom/=; the
+emacs2 build includes them without loading Doom itself.
+
 * Template integration
 
 The repository root exports templates; the Ganymede directory becomes the
@@ -51,7 +56,7 @@ nix build --impure --expr '
         (import ./users/josh/nix/overlays/emacs2.nix)
       ];
     };
-  in [ pkgs.emacs2 pkgs.emacs2.tests.startup ]
+  in [ pkgs.emacs2 pkgs.emacs2.tests.startup pkgs.emacs2.tests.agents ]
 ' --no-link --print-out-paths
 #+end_src
 

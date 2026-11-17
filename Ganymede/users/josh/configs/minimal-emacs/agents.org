@@ -1,0 +1,94 @@
+#+title: Agent Shell and design reviews in emacs2
+
+* Scope and implementation
+
+The full Doom agent workflow is available in emacs2: inline prompts and replies,
+manual permission review, completion notifications, bounded tool previews,
+editor navigation through MCP, and the Org design-review workflow with
+background checks and reviewer sessions. Design review is core to this setup.
+
+The existing implementation remains in =configs/doom/= and is shared by both
+editors. The emacs2 Nix build copies only the selected extension libraries and
+Mermaid configuration into its immutable runtime directory. It does not load
+Doom itself, its configuration or its keybinding macros. Licences and source
+attribution remain in the shared extension files. Changes to those shared files
+affect both editors; the emacs2 bindings live separately here.
+
+=agents.el= registers lazy commands and Babel entry points.
+=emacs2-agent-setup.el= loads the workflow on first use.
+=emacs2-agent-keys.el= implements the Doom-style agent menus using Evil keymaps.
+Normal editor startup does not start an agent, connect MCP or send a request.
+
+* Where packages come from
+
+| Component | Source |
+|-----------+--------|
+| Agent Shell, ACP, Shell Maker | Emacs packages from the locked Nix inputs |
+| Magit, Transient, Mermaid mode and ob-mermaid | Locked Nix Emacs package set |
+| codex-acp, Go, curl, mermaid-cli, socat and desktop tools | Locked Nix packages |
+| rhblind/emacs-mcp-server | Explicit Nix build; absent from the locked Emacs package set |
+| Inline UI, permission UI, notifications, output limits and navigation | Vendored Lisp in configs/doom |
+| Design review and go-design-check | Local Lisp and Go sources in configs/doom |
+
+The MCP server exception is declared in =nix/overlays/emacs2-agent-packages.nix=:
+version 0.7.0, commit =a5d749cf9880598f66308545985526fd4460627f=, with a fixed
+source hash. Everything is installed by Nix. Emacs does not fetch packages at
+runtime. Updating =flake.lock= controls the packaged dependencies; run the
+agent checks when upgrading because the extensions use Agent Shell APIs.
+
+* Everyday commands
+
+| Key | Action |
+|-----+--------|
+| SPC a a | Open Agent Shell |
+| SPC a p | Discuss the selection or source context inline |
+| SPC a r | Reply to an inline conversation |
+| SPC a l | Continue the latest inline conversation here |
+| SPC a P | Visit or cycle existing previews |
+| SPC a n | Navigate a reply without moving the source cursor |
+| SPC a v | Review pending permissions or visit the conversation |
+| SPC a o | Response actions |
+| SPC a N n | New conversation |
+| SPC a N r | Resume a session |
+| SPC a ? | All public Agent Shell commands |
+| SPC m D n | Create an Org design review |
+| SPC m D v | Validate the review document |
+| SPC m D c | Check the current review block |
+| SPC m D a | Check the document and start reviews |
+
+The design-review bindings are local to Org. =SPC m= opens local agent menus
+in agent buffers; =C-c m= provides the same menus in insert state. In an inline
+prompt, =RET= inserts a newline in insert state; =Esc :wq RET= sends the draft.
+=C-c SPC= still cycles the source reference. Empty drafts close without sending.
+Permission requests require an explicit review action and do not steal editing
+keys. The existing confirmed, session-scoped bypass command is retained.
+
+The detailed behaviour is documented in =configs/doom/docs/inline.md= and
+=configs/doom/docs/design-review.org=. The existing org-design-review agent
+skill is shared too. Authentication uses the normal Codex setup.
+
+* State and appearance
+
+Transcripts and screenshots live under =~/.local/state/emacs2/agent-shell/projects/=
+in directories identified by a hash of the project path. Agent caches and shell
+history also live under the persisted emacs2 state directory. No project-local
+=.agent-shell/= directory or Git ignore entry is needed. Existing Doom state is
+not migrated or overwritten. The external Codex process retains its own state.
+
+Agent Shell inherits the custom Gruvbox theme's standard faces. Notifications
+remain asynchronous, including i3 focus requests. The existing output limit
+applies to displayed tool previews and Emacs transcripts, not agent tool results.
+
+* Verification
+
+The emacs2 overlay exposes =tests.startup= and =tests.agents=. The latter runs
+the existing offline permission, inline, scrolling, notification, output-limit,
+navigation and design-review suites, plus checks for emacs2's bindings and state
+locations. It uses a deterministic local ACP server, not a paid provider.
+The Go checker is built with its own Go tests. GUI-specific scrolling checks
+require a graphical Emacs session in addition to the batch checks.
+
+Unresolved design findings now carry navigable deterministic context. The
+implementation reviewer can record a separate, cited agent assessment without
+changing UNKNOWN into PASS. Source freshness is checked independently; see
+=configs/doom/docs/design-review.org= for the snapshot boundary and refresh rules.

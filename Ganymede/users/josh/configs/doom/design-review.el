@@ -130,14 +130,14 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
       (cond
        ((string-empty-p (string-trim line)))
        ((string-prefix-p ";" line))
-       ((string-match "\\`- \\(.+?\\) :: \\(.+\\)\\'" line)
+       ((string-match "\\`\\(?:- \\)?\\([^ \t].*?\\) :: \\(.+\\)\\'" line)
         (when (and current (not expectations)) (user-error "Test %s has no expectations" current))
         (setq current (match-string 1 line) expectations nil)
         (push current names))
-       ((string-match-p "\\`  - .+\\'" line)
+       ((string-match-p "\\`\\(?:  \\)?- .+\\'" line)
         (unless current (user-error "Expectation must follow a test behaviour"))
         (setq expectations t))
-       (t (user-error "Use '- TestName :: behaviour' and indented '  - expectation' lines"))))
+       (t (user-error "Use 'TestName :: behaviour' followed by '- expectation' lines"))))
     (when (and current (not expectations)) (user-error "Tests need names, behaviours and expectations"))
     (nreverse names)))
 
@@ -239,13 +239,42 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
                              (append (alist-get 'findings result) nil) "; ")))
     result))
 
+(defun design-review--show-validation (result source)
+  "Display a readable validation RESULT for SOURCE."
+  (let ((buffer (get-buffer-create "*Design review validation*"))
+        (status (alist-get 'status result)))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "Document validation: %s\n\n%s\n\n" status source))
+        (insert (pcase status
+                  ("RUNNING" "Validation is running in the background. You can keep editing.\n")
+                  ("STALE" "The document changed during validation. Run validation again.\n")
+                  ("PASS" "The document is valid. Review the plan before authorising implementation.\n")
+                  (_ "Resolve the problems below, then validate the document again.\n")))
+        (insert "This checks the plan. It does not run tests or review the implementation.\n\n")
+        (dolist (finding (append (alist-get 'findings result) nil))
+          (insert (format "- %s: %s\n"
+                          (or (alist-get 'id finding) "Document")
+                          (alist-get 'message finding))))
+        (goto-char (point-min))
+        (special-mode)))
+    (display-buffer buffer '((display-buffer-below-selected) (window-height . 0.3)))
+    (message "Document validation: %s — see *Design review validation*" status)))
+
 (defun design-review-validate-document ()
   "Check document validity without running tests, Babel or agents."
   (interactive)
-  (let ((result (design-review--validate (design-review--document))))
-    (when (called-interactively-p 'interactive)
-      (message "%s" (json-encode result)))
-    result))
+  (if (called-interactively-p 'interactive)
+      (progn
+        (require 'design-review-async)
+        (design-review--prepare "validate"))
+    (design-review--validate (design-review--document))))
+
+(defun design-review--validation-error (err)
+  "Represent ERR as a readable validation failure."
+  `((status . "ERROR")
+    (findings . [((id . "Document") (message . ,(error-message-string err)))])))
 
 (defun design-review--buffer (path)
   "Visit an existing local Org review PATH without changing selected windows."
@@ -313,8 +342,98 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
    path (lambda () (design-review--put-block id language body heading)))
   `((path . ,path) (id . ,id) (status . "updated")))
 
-(defun design-review-set-context (path body)
-  "Replace PATH's context section with Org BODY, preserving review blocks."
+(defun design-review--authored-text ()
+  "Copy the document without previous Babel results into the review brief."
+  (let ((text (save-restriction
+                (widen)
+                (buffer-substring-no-properties (point-min) (point-max)))))
+    (with-temp-buffer
+      (insert text)
+      (org-mode)
+      (org-babel-map-src-blocks nil (org-babel-remove-result))
+      (buffer-string))))
+
+(defun design-review--diagrams ()
+  "Identify authored diagram blocks and image links in the whole document."
+  (let ((text (design-review--authored-text)) ids (index 0))
+    (with-temp-buffer
+      (insert text)
+      (org-mode)
+      (org-element-map (org-element-parse-buffer) '(src-block link)
+        (lambda (element)
+          (pcase (org-element-type element)
+            ('src-block
+             (when (member (org-element-property :language element)
+                           '("mermaid" "plantuml" "dot" "ditaa" "d2"))
+               (cl-incf index)
+               (push (or (org-element-property :name element)
+                         (format "diagram-%s" index)) ids)))
+            ('link
+             (let ((path (org-element-property :path element)))
+               (when (string-match-p "\\.\\(?:svg\\|png\\|jpe?g\\|webp\\)\\'" path)
+                 (push (concat "image:" path) ids))))))))
+    (delete-dups (nreverse ids))))
+
+(defconst design-review--diagram-instructions
+  "Review each authored diagram against the implementation, using the full plan as context.")
+
+(defun design-review--sync-diagram-review ()
+  "Add a diagram review when needed; remove an unused generated review."
+  (let* ((blocks (plist-get (design-review--document) :blocks))
+         (reviews (seq-filter (lambda (block) (equal (plist-get block :language) "diagram-review")) blocks)))
+    (if (design-review--diagrams)
+        (unless reviews
+          (design-review--put-block "diagram-alignment" "diagram-review"
+                                    design-review--diagram-instructions "Diagram alignment"))
+      (dolist (block reviews)
+        (when (and (equal (plist-get block :id) "diagram-alignment")
+                   (equal (string-trim (plist-get block :body)) design-review--diagram-instructions))
+          (goto-char (plist-get block :begin))
+          (let ((heading (save-excursion
+                           (when (ignore-errors (org-back-to-heading t))
+                             (when (looking-at-p "^\\* Diagram alignment$") (point))))))
+            (org-babel-remove-result)
+            (let ((element (org-element-context)))
+              (delete-region (org-element-property :begin element) (org-element-property :end element)))
+            (when heading
+              (goto-char heading)
+              (let ((end (save-excursion (org-end-of-subtree t t) (point))))
+                (when (string-empty-p (string-trim
+                                       (buffer-substring-no-properties (line-beginning-position 2) end)))
+                  (delete-region heading end))))))))))
+
+(defun design-review--put-context-before (id body)
+  "Place ordinary Org BODY immediately before the review block ID."
+  (design-review--id id)
+  (when (string-match-p "^\\*+ " body)
+    (user-error "Block context uses paragraphs and lists, not headings"))
+  (let* ((block (or (seq-find (lambda (item) (equal (plist-get item :id) id))
+                            (plist-get (design-review--document) :blocks))
+                    (user-error "No review block %s" id)))
+         (heading (format "Notes for %s" id))
+         (sections (org-element-map (org-element-parse-buffer) 'headline
+                     (lambda (item)
+                       (when (and (= (org-element-property :level item) 2)
+                                  (equal (org-element-property :raw-value item) heading))
+                         item)))))
+    (when (cdr sections) (user-error "Duplicate context for %s" id))
+    (if-let* ((section (car sections)))
+        (progn
+          (unless (and (< (org-element-property :begin section) (plist-get block :begin))
+                       (>= (org-element-property :end section) (plist-get block :end))
+                       (not (seq-some
+                             (lambda (other)
+                               (< (org-element-property :begin section)
+                                  (plist-get other :begin) (plist-get block :begin)))
+                             (plist-get (design-review--document) :blocks))))
+            (user-error "Context for %s is no longer adjacent; reconcile the document" id))
+          (goto-char (org-element-property :begin section))
+          (delete-region (point) (plist-get block :begin)))
+      (goto-char (plist-get block :begin)))
+    (insert (format "** %s\n\n%s\n\n" heading (string-trim-right body)))))
+
+(defun design-review-set-context (path body &optional before)
+  "Replace PATH's global context or context BEFORE a named review block."
   (unless (and (stringp body) (not (string-empty-p (string-trim body))))
     (user-error "Context must be non-empty Org text"))
   (when (string-match-p "^\\* " body)
@@ -323,32 +442,32 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
     (insert body)
     (org-mode)
     (org-element-map (org-element-parse-buffer) 'src-block
-      (lambda (block)
-        (when (member (org-element-property :language block) design-review--languages)
-          (user-error "Use the dedicated tools for review blocks")))))
+		     (lambda (block)
+		       (when (member (org-element-property :language block) design-review--languages)
+			 (user-error "Use the dedicated tools for review blocks")))))
   (design-review--edit-document
    path
    (lambda ()
-     (let ((sections (org-element-map (org-element-parse-buffer) 'headline
-                       (lambda (item)
-                         (when (and (= (org-element-property :level item) 1)
-                                    (equal (org-element-property :raw-value item) "Context and decisions"))
-                           item)))))
-       (when (cdr sections) (user-error "Context section is ambiguous"))
-       (if-let* ((section (car sections)))
-           (progn
-             (goto-char (org-element-property :begin section))
-             (forward-line 1)
-             (delete-region (point) (org-element-property :end section)))
-         (goto-char (point-max))
-         (insert "\n* Context and decisions\n"))
-       (insert "\n" (string-trim-right body) "\n\n")
-       (unless (seq-some (lambda (block) (equal (plist-get block :language) "diagram-review"))
-                         (plist-get (design-review--document) :blocks))
-         (design-review--put-block
-          "diagram-alignment" "diagram-review"
-          "Review each authored diagram against the implementation, using the full plan as context."
-          "Diagram alignment")))))
+     (if before
+         (design-review--put-context-before before body)
+       (let ((sections (org-element-map (org-element-parse-buffer) 'headline
+					(lambda (item)
+					  (when (and (= (org-element-property :level item) 1)
+						     (equal (org-element-property :raw-value item) "Context and decisions"))
+					    item)))))
+	 (when (cdr sections) (user-error "Context section is ambiguous"))
+	 (if-let* ((section (car sections)))
+             (progn
+               (goto-char (org-element-property :begin section))
+               (forward-line 1)
+               (delete-region (point) (org-element-property :end section)))
+           (goto-char (point-min))
+           (if (re-search-forward "^\\* " nil t)
+               (beginning-of-line)
+             (goto-char (point-max)))
+           (insert "\n* Context and decisions\n"))
+	 (insert "\n" (string-trim-right body) "\n\n")))
+     (design-review--sync-diagram-review)))
   `((path . ,path) (status . "updated")))
 
 (defun design-review-create (path root title &optional baseline)
@@ -365,7 +484,7 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
   (when (or (file-exists-p path) (get-file-buffer path)) (user-error "Document already exists"))
   (setq baseline (or baseline (design-review--git root "rev-parse" "--verify" "HEAD^{commit}")))
   (with-temp-buffer
-    (insert (format "#+title: %s\n#+DESIGN_ROOT: %s\n#+DESIGN_BASELINE: %s\n\n* Design and changes\n\n* Implementation alignment\n\n#+name: planned-implementation\n#+begin_src implementation-review :results drawer replace :exports both :eval never-export\nReview whether all planned implementation matches its intended behaviour and responsibilities.\n#+end_src\n\n* Tests and behaviours\n\n#+name: test-alignment\n#+begin_src test-review :results drawer replace :exports both :eval never-export\n; No planned tests listed yet. Discover new tests and assess alignment with the full plan.\n#+end_src\n\n* Diagram alignment\n\n#+name: diagram-alignment\n#+begin_src diagram-review :results drawer replace :exports both :eval never-export\nReview each authored diagram against the implementation, using the full plan as context.\n#+end_src\n\n* Changes outside plan\n\n#+name: changes-outside-plan\n#+begin_src change-review :results drawer replace :exports both :eval never-export\nReview all changes against the plan, including changes inside planned functions.\nIdentify unexpected responsibilities and explain any additional changes.\n#+end_src\n"
+    (insert (format "#+title: %s\n#+DESIGN_ROOT: %s\n#+DESIGN_BASELINE: %s\n\n* Context and decisions\n\n* Design and changes\n\n* Implementation alignment\n\n#+name: planned-implementation\n#+begin_src implementation-review :results drawer replace :exports both :eval never-export\nReview whether all planned implementation matches its intended behaviour and responsibilities.\n#+end_src\n\n* Tests and behaviours\n\n#+name: test-alignment\n#+begin_src test-review :results drawer replace :exports both :eval never-export\n; No planned tests listed yet. Discover new tests and assess alignment with the full plan.\n#+end_src\n\n* Changes outside plan\n\n#+name: changes-outside-plan\n#+begin_src change-review :results drawer replace :exports both :eval never-export\nReview all changes against the plan, including changes inside planned functions.\nIdentify unexpected responsibilities and explain any additional changes.\n#+end_src\n"
                     title (directory-file-name root) baseline))
     (org-mode)
     (design-review--require-valid (design-review--document))

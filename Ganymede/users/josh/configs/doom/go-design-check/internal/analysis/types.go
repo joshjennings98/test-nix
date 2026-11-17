@@ -32,12 +32,17 @@ type Edge struct {
 }
 
 type Gap struct {
-	From     string   `json:"from"`
-	Reason   string   `json:"reason"`
-	Location Location `json:"location"`
+	Expression   string      `json:"expression,omitempty"`
+	Method       string      `json:"method,omitempty"`
+	Signature    string      `json:"signature,omitempty"`
+	MethodObject *types.Func `json:"-"`
+	From         string      `json:"from"`
+	Reason       string      `json:"reason"`
+	Location     Location    `json:"location"`
 }
 
 type Graph struct {
+	Objects        map[string]types.Object      `json:"-"`
 	TypesSizes     types.Sizes                  `json:"-"`
 	SourcePackages map[string]*packages.Package `json:"-"`
 	Nodes          map[string]Node              `json:"nodes"`
@@ -132,4 +137,42 @@ func (g *Graph) RelationshipGap(from, kind string) bool {
 	return slices.ContainsFunc(g.Gaps, func(gap Gap) bool {
 		return gap.From == from && !g.Nodes[from].External
 	})
+}
+
+// RelationshipGaps retains uncertainty unless a direct target is incompatible.
+// Transitive paths can still pass through an otherwise incompatible method.
+func (g *Graph) RelationshipGaps(from, to, kind string) (gaps []Gap) {
+	for _, gap := range g.Gaps {
+		if g.Nodes[gap.From].External {
+			continue
+		}
+
+		if kind == "reaches" || kind == "forbid_path" {
+			if gap.From == from || len(g.Path(from, gap.From, true)) > 0 {
+				gaps = append(gaps, gap)
+			}
+			continue
+		}
+
+		if gap.From != from || (kind != "direct_call" && kind != "forbid_call") {
+			continue
+		}
+
+		if method := gap.MethodObject; method != nil {
+			if target, ok := g.Objects[to].(*types.Func); ok {
+				sig := target.Type().(*types.Signature)
+				generic := sig.RecvTypeParams().Len() > 0 || sig.TypeParams().Len() > 0
+				if sig.Recv() == nil || target.Id() != method.Id() || (!generic && !types.Identical(sig, method.Type())) {
+					continue
+				}
+			}
+		}
+		gaps = append(gaps, gap)
+	}
+	return
+}
+
+func interfaceGap(from, reason string, method *types.Func, loc Location) Gap {
+	return Gap{From: from, Reason: reason, Location: loc, Method: method.Name(),
+		Signature: ObjectSignature(method), MethodObject: method}
 }

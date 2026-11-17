@@ -1,6 +1,7 @@
 ;;; design-review-execution.el --- Babel checks and independent reviews -*- lexical-binding: t; -*-
 
 (require 'design-review)
+(require 'design-review-evidence)
 
 (defvar agent-shell--state)
 (declare-function agent-shell--new-shell "agent-shell")
@@ -10,6 +11,9 @@
 (declare-function agent-shell-insert "agent-shell")
 (declare-function agent-shell-openai-make-codex-config "agent-shell-openai")
 (declare-function magit-diff-range "magit-diff")
+(declare-function magit-diff-setup-buffer "magit-diff")
+(declare-function magit-file-tracked-p "magit-git")
+(declare-function magit-git-success "magit-git")
 (declare-function magit-current-section "magit-section")
 
 (defcustom design-review-agent-config nil
@@ -33,7 +37,7 @@
   "Return the assessment obligations for LANGUAGE."
   (pcase language
     ("test-review"
-     "Assess every planned test and discover added or changed tests, including untracked tests. Explain which planned behaviours each supports and whether assertions actually establish them. Identify missing tests and additional tests that conflict with the plan. Distinguish test execution from alignment.")
+     "Assess the tests named in this block, using the full document as context. Explain whether their assertions establish the stated behaviours and identify missing coverage for those behaviours. Do not repeat assessments owned by other test blocks. If this block has no named tests, discover added or changed tests, including untracked tests, and assess their alignment. Distinguish test execution from alignment.")
     ("implementation-review"
      "Review the implementation of all planned work against the full document: behaviour, responsibilities, edge cases and requirements. Explain what matches, what is missing and what contradicts the plan. Deterministic graph checks and passing tests alone do not establish implementation alignment.")
     ("diagram-review"
@@ -88,6 +92,8 @@
       (setq lines
             (append lines (list (format "- %s %s: %s" (or (alist-get 'status finding) "REVIEW")
                                         (or (alist-get 'id finding) "") (design-review--text (alist-get 'message finding))))))
+      (when (equal (alist-get 'status finding) "UNKNOWN")
+        (setq lines (append lines (design-review--uncertainty-context finding document))))
       (dolist (location (append (alist-get 'locations finding) nil))
         (when-let* ((link (design-review--location-links document (alist-get 'file location) (alist-get 'line location))))
           (setq lines (append lines (list (format "  %s" link)))))))
@@ -104,38 +110,6 @@
       (design-review--format-findings
        (design-review--tool (plist-get document :root) "check" request) document))))
 
-(defun design-review--authored-text ()
-  "Copy the document without previous Babel results into the review brief."
-  (let ((text (save-restriction
-                (widen)
-                (buffer-substring-no-properties (point-min) (point-max)))))
-    (with-temp-buffer
-      (insert text)
-      (org-mode)
-      (org-babel-map-src-blocks nil (org-babel-remove-result))
-      (buffer-string))))
-
-(defun design-review--diagrams ()
-  "Identify authored diagram blocks and image links in the whole document."
-  (let ((text (design-review--authored-text)) ids (index 0))
-    (with-temp-buffer
-      (insert text)
-      (org-mode)
-      (org-element-map (org-element-parse-buffer) '(src-block link)
-        (lambda (element)
-          (pcase (org-element-type element)
-            ('src-block
-             (when (member (org-element-property :language element)
-                           '("mermaid" "plantuml" "dot" "ditaa" "d2"))
-               (cl-incf index)
-               (push (or (org-element-property :name element)
-                         (format "diagram-%s" index)) ids)))
-            ('link
-             (let ((path (org-element-property :path element)))
-               (when (string-match-p "\\.\\(?:svg\\|png\\|jpe?g\\|webp\\)\\'" path)
-                 (push (concat "image:" path) ids))))))))
-    (delete-dups (nreverse ids))))
-
 (defun design-review--diagram-task (block)
   "Require explicit per-diagram findings for a diagram review BLOCK."
   (when (equal (plist-get block :language) "diagram-review")
@@ -146,15 +120,18 @@
   "Build a bounded review brief from the authored document and Git changes."
   (let* ((root (plist-get document :root))
          (baseline (plist-get document :baseline))
-         (changes (unless (equal baseline "none")
+         (changes (if (plist-member document :changes)
+                      (plist-get document :changes)
+                    (unless (equal baseline "none")
                     (concat (design-review--git root "status" "--short" "--untracked-files=all") "\n"
-                            (design-review--git root "diff" "--no-ext-diff" "--no-textconv" baseline "--"))))
+                            (design-review--git root "diff" "--no-ext-diff" "--no-textconv" baseline "--")))))
          (limit 60000))
     (format "Independent design review. This conversation is dedicated to review, separate from the implementation conversation. Assess this task against the current supplied evidence; earlier turns are not proof that current code is correct. Do not edit project files or the Org document, and do not revise the plan to fit the code. Inspect the actual source and tests relevant to your assigned remit. The full document is shared context, not a request to perform every review. When subagents are supported, delegate this focused review to a fresh subagent with the FULL authored document, this task, project root and baseline. Preserve its remit and require evidence. Collect its findings and return the required JSON yourself. Do not ask the subagent to recursively delegate. If subagents are unavailable, perform this focused review directly. Report findings only for this review type: test reviewers own test alignment, implementation reviewers own planned code, diagram reviewers own diagram conformance, and change reviewers own out-of-plan changes. Use other sections as evidence without duplicating their reviews. You may run relevant tests; distinguish execution outcomes from semantic assessment. Do not claim tests ran unless you ran them and saw their outcomes.\n\nProject root: %s\nBaseline: %s\nReview block: %s (%s)\n\nTask:\n%s\n\nAuthored document:\n%s\n\nGit status and tracked changes:\n%s\n\nInspect untracked files and any omitted diff/context yourself. For change-review, cover the entire repository, including changes within planned symbols, tests and non-Go files; naming a symbol in the plan does not approve every change to it. If baseline is none, historical change coverage is unavailable.\n\nReturn a final JSON object only: {\"summary\":\"short assessment\",\"findings\":[{\"status\":\"PASS|REVIEW|FAIL|UNKNOWN\",\"message\":\"specific evidence and limitations\",\"file\":\"path relative to project root\",\"line\":1}],\"test_execution\":\"commands and observed results, or not run\"}. Include source references for concerns. If evidence is insufficient, report UNKNOWN. Passing tests alone do not establish the stated behaviours."
             root baseline (plist-get block :id) (plist-get block :language)
             (concat (design-review--review-task (plist-get block :language)) "\n\n" (plist-get block :body)
-                    (design-review--diagram-task block))
-            (design-review--authored-text)
+                    (design-review--diagram-task block)
+                    (design-review--uncertainty-brief block document))
+            (or (plist-get document :authored-text) (design-review--authored-text))
             (cond ((null changes) "Unavailable: no pinned Git baseline.")
                   ((> (length changes) limit) (concat (substring changes 0 limit) "\n[TRUNCATED: inspect the remaining changes yourself]"))
                   (t changes)))))
@@ -196,6 +173,7 @@
                                (not (string-empty-p (string-trim (alist-get 'message finding))))))
                         (append (alist-get 'findings decoded) nil))
         (setq lines (append lines (list (format "- UNKNOWN [%s]: reviewer omitted an explicit diagram assessment." id))))))
+    (setq lines (append lines (design-review--format-assessments run decoded)))
     (string-join lines "\n")))
 
 (defun design-review--finish (key run text)
@@ -218,6 +196,10 @@
                        (equal (plist-get block :language) (plist-get run :language)))
                   (save-excursion
                     (goto-char (plist-get block :begin))
+                    (when (and (plist-get (plist-get run :document) :fingerprint)
+                               (not (equal (plist-get (plist-get run :document) :authored-text)
+                                           (design-review--authored-text))))
+                      (setq text (replace-regexp-in-string "Evidence freshness: CURRENT" "Evidence freshness: STALE" text t t)))
                     (org-babel-insert-result text '("drawer" "replace")))
                 (message "Review %s finished for an edited/removed block; inspect its conversation" (cdr key))))
           (error (message "Review result retained in conversation: %s" (error-message-string err))))))))
@@ -261,9 +243,23 @@
         (agent-shell-insert :text (plist-get run :prompt) :submit t :no-focus t :shell-buffer (plist-get run :shell))
       (error (design-review--finish key run (format "UNKNOWN: could not submit review: %s" (error-message-string err)))))))
 
-(defun design-review--start-review (block document)
+(defun design-review--start-review (block document &optional validated)
   "Queue BLOCK in the document's dedicated review conversation."
-  (design-review--require-valid document)
+  (unless validated (setq validated (design-review--require-valid document)))
+  (when (and (equal (plist-get block :language) "implementation-review")
+             (not (plist-member document :checks)))
+    (setf (plist-get document :path) buffer-file-name
+          (plist-get document :authored-text) (design-review--authored-text)
+          (plist-get document :fingerprint) (design-review--source-fingerprint
+                                           (append (list :path buffer-file-name :authored-text (design-review--authored-text)) document)))
+    (let (checks)
+      (dolist (graph (plist-get document :blocks))
+        (when (equal (plist-get graph :language) "design-graph")
+          (let ((request (alist-get (intern (plist-get graph :id)) (alist-get 'requests validated))))
+            (when (> (length (alist-get 'rules request)) 0)
+              (push `((id . ,(plist-get graph :id))
+                      (result . ,(design-review--tool (plist-get document :root) "check" request))) checks)))))
+      (setf (plist-get document :checks) (vconcat (nreverse checks)))))
   (require 'agent-shell)
   (let* ((key (cons (current-buffer) (plist-get block :id)))
          (prompt (design-review--brief block document))
@@ -352,14 +348,24 @@
     (forward-line (1- (alist-get 'line data)))))
 
 (defun design-review-follow-diff (path _argument)
-  "Open a baseline-to-worktree Magit diff near the finding encoded in PATH."
+  "Open PATH's baseline diff, including untracked additions.
+Open the source location when there is no content diff to display."
   (require 'magit-diff)
   (let* ((data (design-review--decode-link path))
-         (default-directory (file-name-as-directory (alist-get 'root data)))
-         (repository (design-review--git default-directory "rev-parse" "--show-toplevel"))
-         (file (file-relative-name (expand-file-name (alist-get 'file data) default-directory) repository))
-         (line (alist-get 'line data)))
-    (magit-diff-range (alist-get 'baseline data) '("--no-ext-diff" "--no-textconv") (list file))
+         (root (file-name-as-directory (alist-get 'root data)))
+         (repository (design-review--git root "rev-parse" "--show-toplevel"))
+         (default-directory (file-name-as-directory repository))
+         (absolute (expand-file-name (alist-get 'file data) root))
+         (file (file-relative-name absolute repository))
+         (baseline (alist-get 'baseline data))
+         (line (or (alist-get 'line data) 1))
+         (new (and (file-regular-p absolute)
+                   (not (magit-file-tracked-p file))
+                   (not (magit-git-success "cat-file" "-e" (format "%s:%s" baseline file))))))
+    (if new
+        (magit-diff-setup-buffer nil "--no-index" '("--no-ext-diff" "--no-textconv")
+                                 (list null-device absolute) 'undefined)
+      (magit-diff-range baseline '("--no-ext-diff" "--no-textconv") (list file)))
     (goto-char (point-min))
     (let (nearest)
       (while (re-search-forward "^@@ -[0-9]+\\(?:,[0-9]+\\)? +\\+\\([0-9]+\\)\\(?:,\\([0-9]+\\)\\)? @@" nil t)
@@ -368,8 +374,17 @@
           (when (or (null nearest) (<= start line)) (setq nearest (line-beginning-position)))
           (when (and (<= start line) (< line (+ start (max 1 length))))
             (goto-char (point-max)))))
-      (when nearest (goto-char nearest)))
-    (when (fboundp 'magit-section-show) (magit-section-show (magit-current-section)))))
+      (if nearest
+          (progn
+            (goto-char nearest)
+            (magit-section-show (magit-current-section)))
+        (if (file-regular-p absolute)
+            (progn
+              (find-file absolute)
+              (goto-char (point-min))
+              (forward-line (1- line))
+              (message "No content diff against the review baseline for %s; opened source" file))
+          (user-error "No diff or current source for %s; the review result may be outdated" file))))))
 
 (org-link-set-parameters "design-source" :follow #'design-review-follow-source)
 (org-link-set-parameters "design-diff" :follow #'design-review-follow-diff)

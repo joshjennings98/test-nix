@@ -47,7 +47,9 @@
 (use-package evil-collection
   :after evil
   :demand t
-  :config (evil-collection-init))
+  :config
+  (setq evil-collection-mode-list (delq 'agent-shell evil-collection-mode-list))
+  (evil-collection-init))
 
 (use-package goto-chg :commands (goto-last-change goto-last-change-reverse))
 (use-package evil-surround
