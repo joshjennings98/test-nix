@@ -1,0 +1,79 @@
+#+title: Org design review integration
+
+* Agreed behaviour
+Org is authoritative. Agents author named graph and test blocks through MCP;
+validated edits preserve unrelated prose. Unmarked tree entries provide context;
+add/remove/preserve entries create requirements. Proposed declarations need not
+exist in the implementation. A separate validate-document operation checks the
+whole document against its baseline and proposal, without running Babel or agents.
+
+Babel runs deterministic checks or queues an assessment in a dedicated review
+conversation, separate from the implementation conversation, defaulting to Codex
+with Astra. Test alignment (including new tests), planned implementation alignment,
+diagram conformance, and out-of-plan changes and their effects each have separate
+blocks and results. Each receives the full authored plan but reports only within
+its remit. Recommend fresh subagents when supported, with sequential review in the
+dedicated conversation as fallback.
+Running all blocks provides consolidated feedback inline. Findings link to code
+and Magit diffs. No file watchers, automatic source invalidation or snapshot
+locking: the user explicitly accepts rerunning checks after edits. Results show
+when they ran. In-flight callbacks must still avoid writing into a replaced block.
+
+* Implementation
+- Extend Go with document validation and compilation to existing check requests.
+  Reuse designlint's proposed declaration parser and type checking rather than
+  weakening validity to syntax alone. Cross-block declarations are validated
+  together. Existing relationships use the baseline graph; additions remain
+  explicit and absent until implementation.
+- Elisp owns Org parsing/rendering, atomic candidate edits, block IDs, baseline
+  worktrees, Babel execution, asynchronous agent results and Magit links.
+- Register review tools on the existing emacs-navigation MCP server, supplied
+  through the existing Agent Shell ACP configuration. Use the same functions for
+  MCP and interactive entry points.
+- Build/install the tool with the Doom Nix module. Keep executable customisable.
+- Stable names replace blocks instead of duplicating them. Validated mutations
+  save the document; manual unsaved edits are preserved in the candidate buffer.
+
+* Format and boundaries
+Readable graph blocks contain declaration lines and indented trees with explicit
+relationship labels. Emacs translates these to JSON, as agreed. Named test blocks
+contain behaviours and expectations in prose. The document records a project root
+and pinned Git commit, or explicitly chooses current-code validation without Git.
+Standalone explanatory prose remains editable. Validation never implements a
+proposal, runs tests or launches agents. Behavioural assessments are advisory and
+share a dedicated session with a read-only brief; actual capabilities depend on the
+agent's permission configuration.
+
+* Verification
+Go fixtures: valid unimplemented declarations, cross-block references, malformed
+shapes, contradictory requirements and actual implementation mismatch. ERT:
+round-trip graphs, repeated edits, atomic rejection, manual edits, Babel result
+placement, shared review conversation and queue routing, edited blocks, MCP registration and diff
+navigation. Run the existing navigation checks and relevant Go checks. Live
+provider quality remains outside the deterministic test guarantee.
+
+* Completion evidence
+- Go tests, race tests and vet pass, including cross-block proposal validation and
+  the distinction between valid unimplemented intent and implementation failure.
+- Seventeen Org/MCP/navigation tests pass using real local Go, Git, Org, Magit and
+  mock ACP processes. Sixteen existing inline-agent tests also pass.
+- The Nix package builds and its check phase runs the complete Go suite.
+- Elisp byte compilation is clean. No NixOS activation or live model trial was
+  performed; activate through the normal rebuild and a new Agent Shell session.
+
+* Org workflow and Mermaid follow-up
+The user requested Mermaid support and an invokable skill that uses this same Org
+backing document for planning and verification, rather than a separate Show Me
+artefact. Add the Nix CLI and Emacs packages, readable SVG configuration and inline
+refresh. Add a validated context-section MCP edit for prose and diagrams while
+preserving live unsaved notes. Keep org-design-review self-contained without modifying other planning skills. Diagram conformance has its own reviewer and result drawer;
+full-document context includes diagram source, and missing diagram assessments are
+explicitly UNKNOWN. Recommendations to delegate reviews do not guarantee provider
+subagent availability. No live model trial or system activation is implied.
+
+Verification for this follow-up: eighteen Org/MCP/navigation tests pass, including
+whole-document diagram context, separate diagram-review instructions, explicit
+UNKNOWN for omitted diagram assessments and shared conversation result routing.
+The skill passes quick_validate. Nix syntax checks pass and Mermaid CLI/editor
+packages build. Real Org Babel renders both sequence and flow diagrams to SVG
+with visible text labels; Chromium required execution outside the agent sandbox.

@@ -6,6 +6,9 @@ in
 {
   nixpkgs = {
     overlays = [
+      inputs.emacs-overlay.overlays.default
+      (import ./overlays/emacs2.nix)
+      (import ./overlays/mermaid.nix)
       (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix) { inherit pkgs lib; }; })
       (final: pre: { shellScripts = pre.callPackage (import ./shell-scripts.nix) { inherit pkgs lib; }; })
 
@@ -20,12 +23,14 @@ in
   imports = [
     ./firefox.nix
     ./i3.nix
+    ./minimal-emacs.nix
   ];
 
   home = {
     username = "josh";
     homeDirectory = "/home/josh";
     pointerCursor = {
+      enable = true;
       package = pkgs.adwaita-icon-theme;
       name = "Adwaita";
       size = 16;
@@ -54,6 +59,7 @@ in
       ".cache/mesa_shader_cache"
       ".config/spotify"
       ".config/gh"
+      ".codex"
     ];
     files = [
       ".screenrc"
@@ -71,6 +77,7 @@ in
     cargo
     cookiecutter
     delve
+    emacs2
     discord
     dockerfile-language-server
     fd
@@ -89,7 +96,7 @@ in
     jq
     kak-tree-sitter
     keepassxc
-    lxappearance-gtk2
+    lxappearance
     nil
     obsidian
     pagefind # TODO: move to dev flake in website
@@ -195,6 +202,7 @@ in
     enable = true;
     enableMcpIntegration = true;
     context = builtins.readFile "${ai}/AGENTS.md";
+    skills.org-design-review = "${ai}/skills/org-design-review/SKILL.md";
   };
 
   programs.mpv.enable = true;

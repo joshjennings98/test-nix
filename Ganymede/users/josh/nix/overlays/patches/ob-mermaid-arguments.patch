@@ -1,0 +1,55 @@
+--- a/ob-mermaid.el
++++ b/ob-mermaid.el
+@@ -90,31 +90,27 @@
+                            mmdc-path
+                          (error "Found mmdc at %s but it's not executable" mmdc-path))
+                      (error "`ob-mermaid-cli-path' is not set and mmdc is not in `exec-path'"))))
+-         (cmd (concat (shell-quote-argument mmdc)
+-                      " -o " (org-babel-process-file-name out-file)
+-                      " -i -"
+-		      (when theme
+-			(concat " -t " theme))
+-		      (when background-color
+-			(concat " -b " background-color))
+-		      (when width
+-			(concat " -w " (if (numberp width) (number-to-string width) width)))
+-		      (when height
+-			(concat " -H " (if (numberp height) (number-to-string height) height)))
+-		      (when scale
+-			(concat " -s " (if (numberp scale) (number-to-string scale) (number-to-string scale))))
+-		      (when pdf-fit
+-			(concat " -f "))
+-		      (when mermaid-config-file
+-			(concat " -c " (org-babel-process-file-name mermaid-config-file)))
+-		      (when css-file
+-			(concat " -C " (org-babel-process-file-name css-file)))
+-                      (when puppeteer-config-file
+-                        (concat " -p " (org-babel-process-file-name puppeteer-config-file)))
+-		      (when cmdline
+-			(concat " " cmdline)))))
+-    (message "%s" cmd)
+-    (org-babel-eval cmd body)
++         (args (append
++                (list "-o" (org-babel-process-file-name out-file t) "-i" "-")
++                (when theme (list "-t" theme))
++                (when background-color (list "-b" background-color))
++                (when width (list "-w" (format "%s" width)))
++                (when height (list "-H" (format "%s" height)))
++                (when scale (list "-s" (format "%s" scale)))
++                (when pdf-fit (list "-f"))
++                (when mermaid-config-file
++                  (list "-c" (org-babel-process-file-name mermaid-config-file t)))
++                (when css-file
++                  (list "-C" (org-babel-process-file-name css-file t)))
++                (when puppeteer-config-file
++                  (list "-p" (org-babel-process-file-name puppeteer-config-file t)))
++                (when cmdline (split-string-and-unquote cmdline)))))
++    (with-temp-buffer
++      (insert body)
++      (let ((status (apply #'call-process-region (point-min) (point-max)
++                           mmdc t t nil args)))
++        (unless (eq status 0)
++          (error "Mermaid failed (%s): %s" status (buffer-string)))))
+     nil))
+ 
+ (provide 'ob-mermaid)
