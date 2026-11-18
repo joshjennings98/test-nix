@@ -8,7 +8,15 @@ is recorded in the source header. The backend uses the pinned Agent Shell
 
 ## Everyday use
 
-Use `SPC a P` to visit and centre an existing preview. Repeated presses cycle
+In minimal Emacs (`emacs2`), `SPC a L` picks a conversation and opens a fresh
+inline preview and draft at point. `SPC a S` changes the selected preview or
+draft's session, just like clicking the highlighted shortcut beside its name. `SPC a c` selects the next
+preview in the current buffer; `SPC a C` cycles across buffers. Cycling does not
+send a prompt or open a draft. Reply and quick-message commands use the selected
+preview, even when several share a source line. Region sending is `SPC a i r`.
+These bindings are defined separately from Doom's bindings below.
+
+Use `SPC a P` to select an existing preview, bringing it into view if necessary. Repeated presses cycle
 through previews across open buffers. It does not create a new preview.
 
 Completed turns show a persistent Dunst notification when you are elsewhere.
@@ -26,6 +34,14 @@ corrections at the preview anchor: upward measurement excludes virtual rows
 already traversed, and downward movement retains the offset into the anchor's
 text row. Both use the current layout, including wrapped lines and resized
 previews. The cursor can remain below the reply.
+
+Session names are faint, while reply text retains its normal styling. The focused
+preview's session name is also bold. Creating or cycling to a preview moves this
+emphasis. Plain response labels and session names remain draggable; clicking them
+focuses the preview without activating an action. Cycling leaves an already-visible
+preview in place and only reveals previews that are off-screen. Scrolling another preview with the
+wheel or its arrow controls does not move focus, select its window or move the
+source cursor.
 
 The reply, header controls and conversation name wrap to the window width.
 Sideways wheel gestures over the reply do not shift the document. Use `SPC a P`
@@ -58,31 +74,39 @@ source. Enter your question, press `Esc`, then type `:wq` and press `RET` to sen
 In insert state, `RET` adds a newline. The prompt closes and the answer streams beside
 your source. The conversation stays in the background.
 
-Use `SPC a l` to continue your most recent inline conversation at the cursor,
+Use `SPC a l` to continue your most recently selected inline conversation at the cursor,
 including in another file such as the generated Org review. Write your follow-up
 and send with `:wq`; the reply appears in that file with the same conversation
 history. This does not select the separate reviewer session unless you last used
 that session for an inline message. Closed conversations are skipped.
 
-All existing previews of that conversation follow new turns, including messages
-sent in the conversation buffer. A preview showing an older reply stays there;
-use its live control to return to the latest response.
+Completed previews keep their original replies when new turns are sent elsewhere.
+A newer-reply count appears with a clickable **Latest reply** action,
+available without entering navigation. It updates only that preview and follows
+the latest turn if it is still streaming. Previous/next still browse the full
+history of that preview's conversation.
+
+Click the highlighted shortcut beside the conversation name to choose another
+session for that preview. Other previews keep their sessions. The same shortcut
+in the composer changes that draft's destination; `SPC m v` still visits its conversation.
 
 Drag a preview vertically to move it immediately, even while the pointer remains
 inside it. Dragging measures displayed line heights and preserves where you grabbed
 the preview, including across windows. Navigation controls are clickable while their
 temporary keymap is active, with keys highlighted like the options panel.
 Pending permissions show **Approve** (the oldest request) and **Approve all**
-(all requests currently waiting in that conversation). Both approve once; they
+(all requests currently waiting in that conversation). In emacs2 their highlighted
+shortcuts are `SPC a y` and `SPC a Y`; Latest reply uses `SPC a g`. Only the
+highlighted shortcut is clickable; the label is plain text. Both approvals allow once; they
 leave other conversations and future requests unchanged.
 
-A single Braille spinner character updates every 100 ms while the agent is working. It
-checks Agent Shell and the ACP process, stops for permission input, and shows
-errors or disconnection instead of spinning indefinitely. After 30 seconds
-without activity it shows a quiet duration: silence alone does not prove failure.
+The status text reports work, review requests and completion without a separate
+waiting animation. Transport checks still report disconnected agents. Streamed
+chunks are rendered together at most every 100 ms, with completion rendered immediately.
 
 An empty or whitespace-only draft closes without sending, even with source
-context selected. If sending fails or the agent is busy, the draft stays open.
+context selected. If sending fails or the agent is busy, the draft stays open and the previous
+preview remains available.
 
 The extension reuses your last conversation for that source buffer, otherwise
 an Agent Shell session in the current project. If none exists, it asks you to
@@ -132,7 +156,7 @@ Press `SPC a n` once for temporary preview navigation:
 - `g`: return to this preview's live reply.
 - `Esc` or `q`: exit navigation. Any other editing command also exits and runs normally.
 
-The response header's reply, navigate and more hints are clickable, as are
+The highlighted shortcut portions of reply, navigate and more are clickable, as are
 the scroll arrows. In navigation mode, click any labelled action to scroll,
 browse replies, return to the live reply or exit. Clicks act on that preview;
 scrolling keeps your source cursor in place. The response body can still be dragged.

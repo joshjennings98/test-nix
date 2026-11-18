@@ -50,7 +50,6 @@
 (require 'project)
 (require 'button)
 (require 'mwheel)
-(require 'vtable)
 (require 'agent-shell)
 
 (declare-function agent-shell-permission-transient-menu "agent-shell-permission-transient")
@@ -249,7 +248,7 @@ Returns a list of URL strings found in the region."
 (defvar-keymap agent-shell-inline-response-overlay-map
   :doc "Keymap for mouse actions on response overlay."
   "<down-mouse-1>" #'agent-shell-inline--response-overlay-drag
-  "<mouse-1>"      #'agent-shell-inline--response-overlay-dispatch
+  "<mouse-1>"      #'agent-shell-inline--focus-from-click
   "<mouse-4>"      #'agent-shell-inline--response-overlay-wheel
   "<wheel-up>"     #'agent-shell-inline--response-overlay-wheel
   "<mouse-5>"      #'agent-shell-inline--response-overlay-wheel
@@ -313,7 +312,7 @@ Call with the dragged preview's display string temporarily removed."
   (let* ((start (event-start event))
          (window (posn-window start))
          (last-input-event event)
-         (overlay (agent-shell-inline--response-overlay-at-point))
+         (overlay (agent-shell-inline--focus-from-click event))
          (mouse-autoselect-window nil))
     (when overlay
       (let ((offset
@@ -338,7 +337,8 @@ Call with the dragged preview's display string temporarily removed."
                                   overlay target (- (cdr (posn-x-y position)) offset)))
                       (move-overlay overlay (line-beginning-position)
                                     (line-end-position) (current-buffer))
-                      (agent-shell-inline--setup-response-overlay-keymap overlay)))
+                      (agent-shell-inline--setup-response-overlay-keymap overlay)
+                      (agent-shell-inline--focus-preview overlay)))
                   (redisplay t))))))))))
 
 (defun agent-shell-inline--response-overlay-scroll-to (index response-ov)
@@ -347,21 +347,67 @@ Call with the dragged preview's display string temporarily removed."
     (agent-shell-inline--response-overlay-set-scroll-index response-ov index)
     (agent-shell-inline--response-overlay-render response-ov)))
 
+(defvar-local agent-shell-inline--selected-preview nil
+  "Preview selected for keyboard actions in this buffer.")
+
+(defvar agent-shell-inline--focused-preview nil
+  "Preview whose faint session name is shown in bold.")
+
+(defun agent-shell-inline--focus-preview (overlay)
+  "Focus OVERLAY without moving point or selecting its window."
+  (when (and (overlayp overlay) (overlay-buffer overlay))
+    (let ((previous agent-shell-inline--focused-preview))
+      (with-current-buffer (overlay-buffer overlay)
+        (setq agent-shell-inline--selected-preview overlay)
+        (let ((shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer)))
+          (when (agent-shell-inline--shell-p shell)
+            (setq agent-shell-inline--last shell
+                  agent-shell-inline--recent (cons shell (delq shell agent-shell-inline--recent))))))
+      (setq agent-shell-inline--focused-preview overlay)
+      (unless (eq previous overlay)
+        (when (and (overlayp previous) (overlay-buffer previous))
+          (agent-shell-inline--response-overlay-render previous))
+        (agent-shell-inline--response-overlay-render overlay))))
+  overlay)
+
+(defun agent-shell-inline--focus-from-click (event)
+  "Focus the preview under EVENT without moving its source view."
+  (interactive "e")
+  (let* ((last-input-event event)
+         (window (posn-window (event-start event)))
+         (overlay (agent-shell-inline--response-overlay-at-point)))
+    (when (and overlay (window-live-p window))
+      (select-window window)
+      (agent-shell-inline--focus-preview overlay))))
+
 (defun agent-shell-inline--response-overlay-at-point ()
-  "Return the `agent-shell-inline' response overlay relevant to point or event."
-  (let* ((is-mouse-event (mouse-event-p last-input-event))
-         (win (if is-mouse-event
-                  (posn-window (event-start last-input-event))
-                (selected-window)))
-         (pos (if is-mouse-event
-                  (posn-point (event-start last-input-event))
-                (point)))
-         (ovs (with-selected-window win
-                (nconc (overlays-in pos (window-end))
-                       ;; 1-: after-string can appear at window-start with the
-                       ;; overlay end before window-start
-                       (overlays-in (1- (window-start)) pos)))))
-    (cl-find-if (lambda (ov) (overlay-get ov 'agent-shell-inline)) ovs)))
+  "Return the mouse target without focusing it, or the selected keyboard preview."
+  (let* ((mouse (or (mouse-event-p last-input-event)
+                    (and (consp last-input-event)
+                         (memq (event-basic-type last-input-event)
+                               '(wheel-up wheel-down mouse-4 mouse-5)))))
+         (position (and mouse (event-start last-input-event)))
+         (window (if mouse (posn-window position) (selected-window)))
+         (text (and mouse (posn-string position)))
+         (target (and text (get-text-property (cdr text) 'agent-shell-inline-overlay (car text)))))
+    (if (and (overlayp target) (overlay-buffer target))
+        target
+      (when (windowp window)
+        (with-selected-window window
+          (let* ((point (if mouse (posn-point position) (point)))
+                 (selected agent-shell-inline--selected-preview)
+                 (nearest (and (not mouse) (overlayp selected)
+                               (eq (overlay-buffer selected) (current-buffer)) selected))
+                 distance)
+            (unless nearest
+              (when (integer-or-marker-p point)
+                (dolist (overlay (overlays-in (point-min) (point-max)))
+                  (when (overlay-get overlay 'agent-shell-inline)
+                    (let ((delta (max 0 (- (overlay-start overlay) point) (- point (overlay-end overlay)))))
+                      (when (or (null distance) (< delta distance)
+                                (and (= delta distance) (> (overlay-start overlay) (overlay-start nearest))))
+                        (setq nearest overlay distance delta)))))))
+            (if mouse nearest (agent-shell-inline--focus-preview nearest))))))))
 
 (defun agent-shell-inline--measure-without-previews (previews measure &rest args)
   "Call MEASURE with ARGS, excluding PREVIEWS' virtual rows temporarily."
@@ -570,7 +616,8 @@ Create a shell without displaying it when the project has no conversation."
                                  (project-root project)
                                default-directory)
                    :no-display t)))
-    (setq agent-shell-inline--last shell)
+    (setq agent-shell-inline--last shell
+          agent-shell-inline--recent (cons shell (delq shell agent-shell-inline--recent)))
     shell))
 
 (defun agent-shell-inline--available-p (shell)
@@ -585,6 +632,9 @@ Create a shell without displaying it when the project has no conversation."
 
 (defun agent-shell-inline--detach (overlay)
   "Unsubscribe OVERLAY and release its pending submission."
+  (when-let* ((timer (overlay-get overlay 'agent-shell-inline-render-timer)))
+    (cancel-timer timer)
+    (overlay-put overlay 'agent-shell-inline-render-timer nil))
   (when-let* ((timer (overlay-get overlay 'agent-shell-inline-timer)))
     (cancel-timer timer)
     (overlay-put overlay 'agent-shell-inline-timer nil))
@@ -617,7 +667,7 @@ Create a shell without displaying it when the project has no conversation."
   (agent-shell-inline--response-overlay-render overlay))
 
 (defun agent-shell-inline--check-activity (overlay)
-  "Refresh OVERLAY from shell and transport state, without echo messages."
+  "Check OVERLAY's transport without a separate waiting animation."
   (let* ((context (overlay-get overlay 'agent-shell-inline))
          (shell (plist-get context :buffer)))
     (cond
@@ -627,26 +677,12 @@ Create a shell without displaying it when the project has no conversation."
       (agent-shell-inline--detach overlay))
      (t
       (with-current-buffer shell
-        (let* ((process (map-nested-elt agent-shell--state '(:client :process)))
-               (status (agent-shell-status))
-               (last-activity (map-elt agent-shell--state :last-activity-time))
-               (last-event (overlay-get overlay 'agent-shell-inline-last-event))
-               (quiet (- (float-time)
-                         (max (if last-activity (float-time last-activity) 0)
-                              (or last-event 0)))))
+        (let ((process (map-nested-elt agent-shell--state '(:client :process))))
           (cond
-           ((and (plist-get context :started)
-                 (not (and process (process-live-p process))))
+           ((and (plist-get context :started) (not (and process (process-live-p process))))
             (agent-shell-inline--finish overlay "Disconnected — visit conversation"))
-           ((and (plist-get context :started) (eq status 'ready))
-            (agent-shell-inline--finish overlay "Stopped — visit conversation"))
-           (t
-            (overlay-put overlay 'agent-shell-inline-activity
-                         (cond
-                          ((eq status 'blocked) "[?] Waiting for input")
-                          ((>= quiet 30) (format "[.] Quiet for %ds" quiet))
-                          (t (string (aref "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" (% (floor (* 10 (float-time))) 10))))))
-            (agent-shell-inline--response-overlay-render overlay)))))))))
+           ((and (plist-get context :started) (eq (agent-shell-status) 'ready))
+            (agent-shell-inline--finish overlay "Stopped — visit conversation")))))))))
 
 (defun agent-shell-inline--start-following (overlay prompt)
   "Follow newly submitted PROMPT in OVERLAY, retaining browsed history."
@@ -662,13 +698,13 @@ Create a shell without displaying it when the project has no conversation."
     (overlay-put overlay 'agent-shell-inline-message-group nil)
     (overlay-put overlay 'agent-shell-inline-review nil)
     (overlay-put overlay 'agent-shell-inline-status "Working")
-    (overlay-put overlay 'agent-shell-inline-activity "⠋")
+    (overlay-put overlay 'agent-shell-inline-activity nil)
     (overlay-put overlay 'agent-shell-inline-last-event (float-time))
     (unless (overlay-get overlay 'agent-shell-inline-history-index)
       (overlay-put overlay 'agent-shell-inline-scroll-index 0))
     (unless (overlay-get overlay 'agent-shell-inline-timer)
       (overlay-put overlay 'agent-shell-inline-timer
-                   (run-at-time 0.1 0.1 #'agent-shell-inline--check-activity overlay)))))
+                   (run-at-time 1 1 #'agent-shell-inline--check-activity overlay)))))
 
 (defun agent-shell-inline--submit-pending (overlay)
   "Submit the pending prompt for OVERLAY once the shell is initialised."
@@ -685,7 +721,10 @@ Create a shell without displaying it when the project has no conversation."
               (plist-get context :started) t)
         (overlay-put overlay 'agent-shell-inline-status "Working")
         (overlay-put overlay 'agent-shell-inline-interaction-index (length (shell-maker-history)))
-        (agent-shell-insert :text (concat "\n\n" text) :submit t :no-focus t :shell-buffer shell)))))
+        (agent-shell-insert :text (concat "\n\n" text) :submit t :no-focus t :shell-buffer shell)
+        (when-let* ((previous (plist-get context :previous-preview)))
+          (agent-shell-inline-clear-response-overlay previous)
+          (setf (plist-get context :previous-preview) nil))))))
 
 (defun agent-shell-inline--on-event (overlay event)
   "Update OVERLAY from an Agent Shell EVENT, without changing window focus."
@@ -696,66 +735,72 @@ Create a shell without displaying it when the project has no conversation."
            (kind (map-elt event :event)))
       (unless (eq kind 'idle)
         (overlay-put overlay 'agent-shell-inline-last-event (float-time)))
-      (pcase kind
-        ('input-submitted
-         (agent-shell-inline--start-following overlay (map-elt data :prompt)))
-        ('init-finished
-         (condition-case err
-             (agent-shell-inline--submit-pending overlay)
-           (error
-            (agent-shell-inline--update-response-overlay
-             (format "\nCould not send: %s\n\nUnsent prompt:\n%s"
-                     (error-message-string err) (plist-get context :prompt)) overlay)
-            (agent-shell-inline--finish overlay "Not sent"))))
-        ('agent-message-chunk
-         (when (and (plist-get context :started) (stringp (map-elt data :text-chunk)))
-           ;; The pinned event API omits message boundaries.  Its group counter
-           ;; advances before this event, including after thoughts and tools.
-           (let ((group (with-current-buffer (plist-get context :buffer)
-                          (map-elt agent-shell--state :chunked-group-count))))
-             (when (and (overlay-get overlay 'agent-shell-inline-message-group)
-                        (not (equal group (overlay-get overlay 'agent-shell-inline-message-group))))
-               (agent-shell-inline--update-response-overlay "\n\n" overlay))
-             (overlay-put overlay 'agent-shell-inline-message-group group))
-           (agent-shell-inline--update-response-overlay (map-elt data :text-chunk) overlay)))
-        ('tool-call-update
-         (unless (overlay-get overlay 'agent-shell-inline-review)
-           (let* ((title (or (map-nested-elt data '(:tool-call :title)) "working"))
-                  (preview (replace-regexp-in-string
-                            "[\n\r\t]+" " " (substring title 0 (min 160 (length title))))))
-             (overlay-put overlay 'agent-shell-inline-status
-                          (format "Tool: %s" (truncate-string-to-width preview 100 nil nil "…"))))))
-        ((or 'permission-request 'elicitation-request)
-         (overlay-put overlay 'agent-shell-inline-review kind)
-         (overlay-put overlay 'agent-shell-inline-status "Review required — SPC a v")
-         (when (eq overlay (buffer-local-value 'agent-shell-inline--active
+      (when (memq kind '(input-submitted turn-complete))
+        (overlay-put overlay 'agent-shell-inline-history-total
+                     (with-current-buffer (plist-get context :buffer) (length (shell-maker-history)))))
+      (when (or (plist-get context :started) (plist-get context :pending) (eq kind 'clean-up))
+	(pcase kind
+          ('input-submitted
+           (agent-shell-inline--start-following overlay (map-elt data :prompt)))
+          ('init-finished
+           (condition-case err
+               (agent-shell-inline--submit-pending overlay)
+             (error
+              (agent-shell-inline--update-response-overlay
+               (format "\nCould not send: %s\n\nUnsent prompt:\n%s"
+                       (error-message-string err) (plist-get context :prompt)) overlay)
+              (agent-shell-inline--finish overlay "Not sent"))))
+          ('agent-message-chunk
+           (when (and (plist-get context :started) (stringp (map-elt data :text-chunk)))
+             ;; The pinned event API omits message boundaries.  Its group counter
+             ;; advances before this event, including after thoughts and tools.
+             (let ((group (with-current-buffer (plist-get context :buffer)
+                            (map-elt agent-shell--state :chunked-group-count))))
+               (when (and (overlay-get overlay 'agent-shell-inline-message-group)
+                          (not (equal group (overlay-get overlay 'agent-shell-inline-message-group))))
+		 (agent-shell-inline--update-response-overlay "\n\n" overlay))
+               (overlay-put overlay 'agent-shell-inline-message-group group))
+             (agent-shell-inline--update-response-overlay (map-elt data :text-chunk) overlay)))
+          ('tool-call-update
+           (unless (overlay-get overlay 'agent-shell-inline-review)
+             (let* ((title (or (map-nested-elt data '(:tool-call :title)) "working"))
+                    (preview (replace-regexp-in-string
+                              "[\n\r\t]+" " " (substring title 0 (min 160 (length title))))))
+               (overlay-put overlay 'agent-shell-inline-status
+                            (format "Tool: %s" (truncate-string-to-width preview 100 nil nil "…"))))))
+          ((or 'permission-request 'elicitation-request)
+           (overlay-put overlay 'agent-shell-inline-review kind)
+           (overlay-put overlay 'agent-shell-inline-status "Review required — SPC a v")
+           (when (eq overlay (buffer-local-value 'agent-shell-inline--active
                                                  (plist-get context :buffer)))
-           (message "Agent needs your input; use agent-shell-inline-review or SPC a v")))
-        ((or 'permission-response 'elicitation-response)
-         (let ((pending (and (bound-and-true-p agent-shell-permission-transient-mode)
-                             (> (agent-shell-permission-transient--buffer-pending-count
-                                 (plist-get context :buffer) (map-elt data :request-id)) 0))))
-           (overlay-put overlay 'agent-shell-inline-review (and pending 'permission-request))
-           (overlay-put overlay 'agent-shell-inline-status
-                        (if pending "Review required — SPC a v" "Working"))))
-        ('turn-complete
-         (when (plist-get context :started)
-           (overlay-put overlay 'agent-shell-inline-review nil)
-           (agent-shell-inline--finish
-            overlay (format "Finished: %s" (or (map-elt data :stop-reason) "done")))))
-        ('error
-         (agent-shell-inline--update-response-overlay
-          (format "\nAgent error: %s" (or (map-elt data :message) "unknown error")) overlay)
-         (when (plist-get context :pending)
+             (message "Agent needs your input; use agent-shell-inline-review or SPC a v")))
+          ((or 'permission-response 'elicitation-response)
+           (let ((pending (and (bound-and-true-p agent-shell-permission-transient-mode)
+                               (> (agent-shell-permission-transient--buffer-pending-count
+                                   (plist-get context :buffer) (map-elt data :request-id)) 0))))
+             (overlay-put overlay 'agent-shell-inline-review (and pending 'permission-request))
+             (overlay-put overlay 'agent-shell-inline-status
+                          (if pending "Review required — SPC a v" "Working"))))
+          ('turn-complete
+           (when (plist-get context :started)
+             (overlay-put overlay 'agent-shell-inline-review nil)
+             (agent-shell-inline--finish
+              overlay (format "Finished: %s" (or (map-elt data :stop-reason) "done")))))
+          ('error
            (agent-shell-inline--update-response-overlay
-            (format "\n\nUnsent prompt:\n%s" (plist-get context :prompt)) overlay))
-         (agent-shell-inline--finish overlay "Error — visit conversation"))
-        ('session-selection-cancelled
-         (agent-shell-inline--finish overlay "Session selection cancelled"))
-        ('clean-up
-         (agent-shell-inline--finish overlay "Conversation closed")
-         (agent-shell-inline--detach overlay)))
-      (agent-shell-inline--response-overlay-render overlay))))
+            (format "\nAgent error: %s" (or (map-elt data :message) "unknown error")) overlay)
+           (when (plist-get context :pending)
+             (agent-shell-inline--update-response-overlay
+              (format "\n\nUnsent prompt:\n%s" (plist-get context :prompt)) overlay))
+           (agent-shell-inline--finish overlay "Error — visit conversation"))
+          ('session-selection-cancelled
+           (agent-shell-inline--finish overlay "Session selection cancelled"))
+          ('clean-up
+           (agent-shell-inline--finish overlay "Conversation closed")
+           (agent-shell-inline--detach overlay))))
+      (if (eq kind 'agent-message-chunk)
+          (when (plist-get context :started) (agent-shell-inline--schedule-render overlay))
+        (agent-shell-inline--response-overlay-render overlay)))))
 
 (defun agent-shell-inline--send (text context)
   "Send TEXT using CONTEXT and return the inline response overlay."
@@ -818,7 +863,8 @@ provided by the editor configuration; they do not install bindings."
          (command (lookup-key (or map agent-shell-inline-response-overlay-map)
                               (vector (car event)))))
     (when (commandp command)
-      (if (eq command #'agent-shell-inline--response-overlay-drag)
+      (if (memq command '(agent-shell-inline--response-overlay-drag
+                          agent-shell-inline--focus-from-click))
           (funcall command event)
         (let ((last-input-event event))
           (call-interactively command))))))
@@ -843,25 +889,49 @@ provided by the editor configuration; they do not install bindings."
         (agent-shell-permission-transient--respond request "allow_once")))
     (agent-shell-inline--response-overlay-render overlay)))
 
+(defun agent-shell-inline-approve-all (overlay)
+  "Approve the current pending-permission snapshot for OVERLAY."
+  (interactive (list (agent-shell-inline--response-overlay-at-point)))
+  (agent-shell-inline-approve overlay t))
+
 (defun agent-shell-inline--response-button (label action)
-  "Make LABEL run interactive ACTION when clicked."
-  (let ((map (make-sparse-keymap)))
+  "Make only the highlighted shortcut in LABEL run interactive ACTION."
+  (let ((map (make-sparse-keymap))
+        (plain-map (make-sparse-keymap))
+        (text (copy-sequence label))
+        (position 0))
     (set-keymap-parent map agent-shell-inline-response-overlay-map)
-    (define-key map [down-mouse-1] #'ignore)
-    (define-key map [mouse-1] action)
-    (propertize label 'keymap map 'mouse-face 'highlight
-                'pointer 'hand 'help-echo "Click to run this action")))
+    (set-keymap-parent plain-map agent-shell-inline-response-overlay-map)
+    (dolist (key '([down-mouse-1] [header-line down-mouse-1]))
+      (define-key map key #'ignore)
+      (define-key plain-map key #'ignore))
+    (define-key plain-map [down-mouse-1] #'agent-shell-inline--response-overlay-drag)
+    (dolist (key '([mouse-1] [header-line mouse-1]))
+      (define-key map key action)
+      (define-key plain-map key #'ignore))
+    (define-key plain-map [mouse-1] #'agent-shell-inline--focus-from-click)
+    ;; Plain labels select or drag the preview, but never run its actions.
+    (add-text-properties 0 (length text)
+                         (list 'keymap plain-map 'pointer 'arrow 'mouse-face nil 'help-echo nil) text)
+    (while (< position (length text))
+      (let ((end (next-single-property-change position 'face text (length text))))
+        (when (eq (get-text-property position 'face text) 'help-key-binding)
+          (add-text-properties position end
+                               (list 'keymap map 'mouse-face 'highlight 'pointer 'hand
+                                     'help-echo "Click to run this action") text))
+        (setq position end)))
+    text))
 
 (defun agent-shell-inline--response-overlay-header (overlay &optional up down)
   "Return the status and navigation header for OVERLAY, with UP and DOWN hints."
-  (format "%s%s%s%s%s | %s"
+  (format "%s%s%s%s%s%s | %s"
           (if (and up (not (string-empty-p up)))
               (agent-shell-inline--response-button
-               up (lambda () (interactive) (agent-shell-inline--response-overlay-up overlay)))
+               (propertize up 'face 'help-key-binding) (lambda () (interactive) (agent-shell-inline--response-overlay-up overlay)))
             "")
           (if (and down (not (string-empty-p down)))
               (agent-shell-inline--response-button
-               down (lambda () (interactive) (agent-shell-inline--response-overlay-down overlay)))
+               (propertize down 'face 'help-key-binding) (lambda () (interactive) (agent-shell-inline--response-overlay-down overlay)))
             "")
           (if-let* ((activity (overlay-get overlay 'agent-shell-inline-activity)))
               (concat (propertize activity 'face 'shadow) " ")
@@ -874,11 +944,22 @@ provided by the editor configuration; they do not install bindings."
           (if (agent-shell-inline--pending-permissions overlay)
               (concat " | "
                       (agent-shell-inline--response-button
-                       "Approve" (lambda () (interactive) (agent-shell-inline-approve overlay)))
+                       (format "Approve: %s" (agent-shell-inline--key-description 'agent-shell-inline-approve))
+                       (lambda () (interactive) (agent-shell-inline-approve overlay)))
                       " / "
                       (agent-shell-inline--response-button
-                       "Approve all" (lambda () (interactive) (agent-shell-inline-approve overlay t))))
+                       (format "Approve all: %s" (agent-shell-inline--key-description 'agent-shell-inline-approve-all))
+                       (lambda () (interactive) (agent-shell-inline-approve overlay t))))
             "")
+          (let ((newer (- (or (overlay-get overlay 'agent-shell-inline-history-total) 0)
+                          (1+ (or (overlay-get overlay 'agent-shell-inline-history-index)
+                                  (overlay-get overlay 'agent-shell-inline-interaction-index) -1)))))
+            (if (> newer 0)
+                (concat " | " (agent-shell-inline--response-button
+                               (format "%d newer · Latest reply: %s" newer
+                                       (agent-shell-inline--key-description 'agent-shell-inline-latest-reply))
+                               (lambda () (interactive) (agent-shell-inline-latest-reply overlay))))
+              ""))
           (or (overlay-get overlay 'agent-shell-inline-header)
               (mapconcat
                #'identity
@@ -901,8 +982,13 @@ provided by the editor configuration; they do not install bindings."
               ((buffer-live-p source)))
     (with-current-buffer source
       (goto-char (point-max))
-      (insert chunk)
-      (font-lock-ensure))))
+      (insert chunk))))
+
+(defun agent-shell-inline--schedule-render (overlay)
+  "Coalesce streamed chunks into one refresh per tenth of a second."
+  (unless (overlay-get overlay 'agent-shell-inline-render-timer)
+    (overlay-put overlay 'agent-shell-inline-render-timer
+                 (run-at-time 0.1 nil #'agent-shell-inline--response-overlay-render overlay))))
 
 (defun agent-shell-inline--display-source (overlay)
   "Return the buffer displayed by OVERLAY, including a browsed history entry."
@@ -917,6 +1003,75 @@ provided by the editor configuration; they do not install bindings."
   (overlay-put overlay 'agent-shell-inline-history-index nil)
   (overlay-put overlay 'agent-shell-inline-scroll-index 0)
   (agent-shell-inline--response-overlay-render overlay))
+
+(defun agent-shell-inline-latest-reply (&optional overlay)
+  "Show the latest reply in OVERLAY's conversation, following it if still busy."
+  (interactive (list (agent-shell-inline--response-overlay-at-point)))
+  (unless (and (overlayp overlay) (overlay-buffer overlay))
+    (user-error "No inline response here"))
+  (let* ((context (overlay-get overlay 'agent-shell-inline))
+         (shell (plist-get context :buffer)))
+    (unless (agent-shell-inline--shell-p shell)
+      (user-error "This conversation has been closed"))
+    (let* ((history (with-current-buffer shell (shell-maker-history)))
+           (latest (car (last history)))
+           (busy (with-current-buffer shell (memq (agent-shell-status) '(busy blocked))))
+           (active (buffer-local-value 'agent-shell-inline--active shell))
+           (group (and (overlayp active) (overlay-get active 'agent-shell-inline-message-group)))
+           (review (and (overlayp active) (overlay-get active 'agent-shell-inline-review)))
+           (active-source (and (overlayp active) (overlay-buffer active)
+                               (plist-get (overlay-get active 'agent-shell-inline) :src)))
+           (text (if (and busy (buffer-live-p active-source))
+                     (with-current-buffer active-source (buffer-string))
+                   (if latest (agent-shell-inline--history-response (cdr latest)) ""))))
+      (agent-shell-inline--show-live overlay)
+      (agent-shell-inline--finish overlay (if latest "Latest reply" "Ready"))
+      (with-current-buffer (plist-get context :src) (erase-buffer))
+      (setf (plist-get context :prompt) (car latest))
+      (overlay-put overlay 'agent-shell-inline-interaction-index (and latest (1- (length history))))
+      (overlay-put overlay 'agent-shell-inline-history-total (length history))
+      (overlay-put overlay 'agent-shell-inline-review nil)
+      (overlay-put overlay 'agent-shell-inline-message-group nil)
+      (when (and busy latest)
+        (agent-shell-inline--start-following overlay (car latest))
+        (overlay-put overlay 'agent-shell-inline-message-group group)
+        (overlay-put overlay 'agent-shell-inline-review review))
+      (agent-shell-inline--update-response-overlay text overlay)
+      (agent-shell-inline--response-overlay-render overlay))))
+
+(defun agent-shell-inline-select-session (overlay &optional name)
+  "Choose NAME for OVERLAY, or for the current inline draft."
+  (interactive (list (agent-shell-inline--response-overlay-at-point)))
+  (if (and (null overlay) (derived-mode-p 'agent-shell-inline-prompt-mode))
+      (if name
+          (agent-shell-inline-switch-buffer name)
+        (call-interactively #'agent-shell-inline-switch-buffer))
+    (unless (and (overlayp overlay) (overlay-buffer overlay))
+      (user-error "No inline response here"))
+    (let* ((name (or name (completing-read "Conversation: "
+					   (cons "New agent shell" (mapcar #'buffer-name (agent-shell-buffers)))
+					   nil t)))
+           (shell (if (equal name "New agent shell")
+                      (with-current-buffer (overlay-buffer overlay)
+			(agent-shell--new-shell :location default-directory :no-display t))
+                    (get-buffer name)))
+           (context (overlay-get overlay 'agent-shell-inline)))
+      (unless (agent-shell-inline--shell-p shell)
+	(user-error "Conversation is no longer available"))
+      (agent-shell-inline--focus-preview overlay)
+      (setq agent-shell-inline--recent (cons shell (delq shell agent-shell-inline--recent)))
+      (unless (eq shell (plist-get context :buffer))
+	(when-let* ((exit (overlay-get overlay 'agent-shell-inline-navigation-exit)))
+          (funcall exit))
+	(agent-shell-inline--detach overlay)
+	(setf (plist-get context :buffer) shell
+              (plist-get context :started) nil
+              (plist-get context :previous-preview) nil)
+	(agent-shell-inline-latest-reply overlay)
+	(setf (plist-get context :subscription)
+              (agent-shell-subscribe-to
+               :shell-buffer shell
+               :on-event (lambda (event) (agent-shell-inline--on-event overlay event))))))))
 
 (defun agent-shell-inline--move-history (overlay direction)
   "Show the adjacent conversation reply in OVERLAY, moving by DIRECTION."
@@ -1020,6 +1175,7 @@ Esc or q exits.  Any other editing command exits and runs normally."
          commands)
     (unless (and (overlayp overlay) (overlay-buffer overlay))
       (user-error "No inline response here"))
+    (agent-shell-inline--focus-preview overlay)
     (when-let* ((exit (overlay-get overlay 'agent-shell-inline-navigation-exit)))
       (funcall exit))
     (dolist (entry `(("j" "down" ,(lambda () (interactive) (agent-shell-inline--response-overlay-down overlay)))
@@ -1094,11 +1250,12 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
   (let* ((source (agent-shell-inline--display-source overlay))
          (width (agent-shell-inline--preview-width overlay))
          (key (when (buffer-live-p source)
-                (list source (buffer-modified-tick source) width)))
+                (list source (buffer-chars-modified-tick source) width)))
          (cached (overlay-get overlay 'agent-shell-inline-wrapped-lines)))
     (if (and cached (equal key (car cached)))
         (cdr cached)
       (let ((lines (when (buffer-live-p source)
+                     (with-current-buffer source (font-lock-ensure))
                      (agent-shell-inline--wrap-lines
                       (with-current-buffer source (buffer-string)) width))))
         (overlay-put overlay 'agent-shell-inline-wrapped-lines (cons key lines))
@@ -1106,49 +1263,50 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
 
 (defun agent-shell-inline--render-source-previews (&rest _)
   "Refresh inline wrapping after the source window layout changes."
-  (dolist (overlay (append (car (overlay-lists)) (cdr (overlay-lists))))
+  (dolist (overlay (overlays-in (point-min) (point-max)))
     (when (overlay-get overlay 'agent-shell-inline)
       (agent-shell-inline--response-overlay-render overlay))))
 
 (defun agent-shell-inline--response-overlay-render (overlay)
   "Render a scrollable slice of OVERLAY's accumulated response."
+  (when-let* ((timer (overlay-get overlay 'agent-shell-inline-render-timer)))
+    (cancel-timer timer)
+    (overlay-put overlay 'agent-shell-inline-render-timer nil))
   (when-let* ((origin (overlay-buffer overlay))
               ((buffer-live-p origin))
               (source (agent-shell-inline--display-source overlay))
               ((buffer-live-p source)))
     (let* ((height (overlay-get overlay 'agent-shell-inline-height))
-           (index (or (overlay-get overlay 'agent-shell-inline-scroll-index) 0))
            (wrapped (agent-shell-inline--response-lines overlay))
            (lines (length wrapped))
-           (index (min index (max 0 (- lines height))))
-           (text (mapconcat #'identity (seq-subseq wrapped index (min lines (+ index height))) "\n")))
+           (index (min (or (overlay-get overlay 'agent-shell-inline-scroll-index) 0)
+                       (max 0 (- lines height))))
+           (text (mapconcat #'identity (seq-subseq wrapped index (min lines (+ index height))) "\n"))
+           (width (agent-shell-inline--preview-width overlay))
+           (shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer))
+           (name (if (buffer-live-p shell) (buffer-name shell) "Closed conversation"))
+           (header (agent-shell-inline--response-overlay-header
+                    overlay (if (> index 0) "↑ " "")
+                    (if (< (+ index height) lines) "↓ " "")))
+           (session (agent-shell-inline--response-button
+                     (format "%s · %s" (propertize name 'face
+                                                    (if (eq overlay agent-shell-inline--focused-preview)
+                                                        '(bold shadow)
+                                                      'shadow))
+                             (agent-shell-inline--key-description 'agent-shell-inline-select-session))
+                     (lambda () (interactive) (agent-shell-inline-select-session overlay))))
+           (display (concat
+                     (propertize agent-shell-inline--hrule 'keymap agent-shell-inline-response-overlay-map)
+                     (string-join (agent-shell-inline--wrap-lines header width) "\n")
+                     (propertize (concat "\n" text agent-shell-inline--hrule)
+                                 'keymap agent-shell-inline-response-overlay-map 'pointer 'hand)
+                     (string-join (agent-shell-inline--wrap-lines session width) "\n"))))
+      (add-text-properties 0 (length display) (list 'agent-shell-inline-overlay overlay) display)
       (overlay-put overlay 'agent-shell-inline-scroll-index index)
-      (overlay-put overlay 'after-string
-                   (concat
-                    (propertize agent-shell-inline--hrule
-                                'keymap agent-shell-inline-response-overlay-map)
-                    (mapconcat #'identity
-                               (agent-shell-inline--wrap-lines
-                                (agent-shell-inline--response-overlay-header
-                                 overlay (if (> index 0) "↑ " "")
-                                 (if (< (+ index height) lines) "↓ " ""))
-                                (agent-shell-inline--preview-width overlay))
-                               "\n")
-                   (propertize
-                    (concat "\n" text agent-shell-inline--hrule
-                            (let* ((shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer))
-                                   (name (or (and (buffer-live-p shell) (buffer-name shell))
-                                             "Closed conversation")))
-                              (mapconcat #'identity
-                                         (agent-shell-inline--wrap-lines
-                                          (propertize name 'face 'shadow)
-                                          (agent-shell-inline--preview-width overlay))
-                                         "\n")))
-                    'keymap agent-shell-inline-response-overlay-map
-                    'pointer 'hand))))))
+      (overlay-put overlay 'after-string display))))
 
 (defun agent-shell-inline--setup-response-overlay (context)
-  "Create a preview for CONTEXT, retiring an earlier follow-up preview."
+  "Create a preview for CONTEXT, retaining its predecessor until submission."
   (let* ((marker (plist-get context :marker))
          (previous (plist-get context :response-ov))
          (previous-buffer (and (overlayp previous) (overlay-buffer previous)))
@@ -1162,8 +1320,6 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
     (unless (buffer-live-p origin)
       (kill-buffer source)
       (user-error "The source buffer has been closed"))
-    (when (overlayp previous)
-      (agent-shell-inline-clear-response-overlay previous))
     (with-current-buffer source
       (agent-shell-inline--prepare-response-buffer))
     (with-current-buffer origin
@@ -1176,7 +1332,8 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
     (setq context (append (list :subscription nil :pending nil :prompt nil
                                :started nil)
                           context))
-    (setf (plist-get context :src) source
+    (setf (plist-get context :previous-preview) previous
+          (plist-get context :src) source
           (plist-get context :response-ov) overlay)
     (overlay-put overlay 'agent-shell-inline context)
     (overlay-put overlay 'agent-shell-inline-height height)
@@ -1184,6 +1341,7 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
     (overlay-put overlay 'agent-shell-inline-status "Starting agent")
     (overlay-put overlay 'priority 65)
     (overlay-put overlay 'keymap agent-shell-inline-response-overlay-map)
+    (agent-shell-inline--focus-preview overlay)
     (agent-shell-inline--response-overlay-render overlay)
     overlay))
 
@@ -1196,7 +1354,7 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
 
 (defun agent-shell-inline--clear-source ()
   "Release previews when their source buffer is killed."
-  (dolist (overlay (append (car (overlay-lists)) (cdr (overlay-lists))))
+  (dolist (overlay (overlays-in (point-min) (point-max)))
     (when (overlay-get overlay 'agent-shell-inline)
       (agent-shell-inline-clear-response-overlay overlay))))
 
@@ -1220,10 +1378,14 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
                   ((buffer-live-p history)))
         (kill-buffer history))
       (delete-overlay overlay)
+      (when (eq agent-shell-inline--focused-preview overlay)
+        (setq agent-shell-inline--focused-preview nil))
       (when (buffer-live-p origin)
         (with-current-buffer origin
+          (when (eq agent-shell-inline--selected-preview overlay)
+            (setq agent-shell-inline--selected-preview nil))
           (unless (cl-some (lambda (item) (overlay-get item 'agent-shell-inline))
-                           (append (car (overlay-lists)) (cdr (overlay-lists))))
+                           (overlays-in (point-min) (point-max)))
             (agent-shell-inline--response-overlay-mode -1)))))))
 
 (defun agent-shell-inline-interrupt ()
@@ -1283,6 +1445,7 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
   (interactive (list (agent-shell-inline--response-overlay-at-point)))
   (unless (and (overlayp overlay) (overlay-buffer overlay))
     (user-error "No inline response here"))
+  (agent-shell-inline--focus-preview overlay)
   (when-let* ((exit (overlay-get overlay 'agent-shell-inline-navigation-exit)))
     (funcall exit))
   (let ((map (make-sparse-keymap))
@@ -1342,24 +1505,77 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
 (defvar-local agent-shell-inline--help-buffer nil
   "Options panel belonging to this prompt.")
 
+(defun agent-shell-inline--prompt-control (prompt label command)
+  "Make highlighted text in LABEL run COMMAND in PROMPT's window."
+  (agent-shell-inline--response-button
+   label
+   (lambda ()
+     (interactive)
+     (unless (buffer-live-p prompt)
+       (user-error "This inline draft has been closed"))
+     (let* ((clicked (and (mouse-event-p last-input-event)
+                          (posn-window (event-start last-input-event))))
+            (window (or (and (window-live-p clicked) (eq (window-buffer clicked) prompt) clicked)
+                        (get-buffer-window prompt t))))
+       (when window (select-window window))
+       (with-current-buffer prompt (call-interactively command))))))
+
 (defun agent-shell-inline--prompt-header ()
-  "Render the conversation link and aligned prompt controls."
-  (let* ((shell (plist-get agent-shell-inline--context :buffer))
-         (controls
-          (format "%s Including %s, Send: %s, Help: %s, Cancel: %s"
-                  (agent-shell-inline--key-description 'agent-shell-inline-cycle-reference)
-                  (propertize (symbol-name (or agent-shell-inline--reference-type 'none))
-                              'face 'mode-line-emphasis)
-                  (agent-shell-inline--key-description 'agent-shell-inline-send)
-                  (agent-shell-inline--key-description 'agent-shell-inline-help)
-                  (agent-shell-inline--key-description 'agent-shell-inline-quit))))
-    (concat " in "
-            (if (buffer-live-p shell)
-                (buttonize (buffer-name shell) #'agent-shell-inline-visit-buffer shell
-                           "Designated conversation: click to visit")
-              (propertize "No conversation" 'face 'shadow))
-            (propertize " " 'display `(space :align-to (- right ,(string-width controls))))
-            controls)))
+  "Fit clickable prompt shortcuts to the window, shortening details as needed."
+  (let* ((prompt (current-buffer))
+         (shell (plist-get agent-shell-inline--context :buffer))
+         (name (if (buffer-live-p shell) (buffer-name shell) "No conversation"))
+         (window (if (eq (window-buffer) prompt) (selected-window)
+                   (or (get-buffer-window prompt t) (selected-window))))
+         (width (max 0 (- (window-body-width window t)
+                          (* 2 (frame-char-width (window-frame window)))))))
+    (cl-labels
+        ((control (label command)
+           (agent-shell-inline--prompt-control
+            prompt
+            (if label
+                (format "%s: %s" label (agent-shell-inline--key-description command))
+              (agent-shell-inline--key-description command))
+            command))
+         (pixels (text)
+           (let ((display (copy-sequence text)))
+             (add-face-text-property 0 (length display) 'header-line t display)
+             (string-pixel-width display prompt)))
+         (fits (text) (<= (pixels text) width))
+         (aligned (session controls)
+           (concat session
+                   (propertize " " 'display
+                               `(space :align-to
+                                       (- right (,(+ (pixels controls)
+                                                      (frame-char-width (window-frame window)))))))
+                   controls))
+         (with-session (controls)
+           (let ((low 1) (high (string-width name)) best)
+             (while (<= low high)
+               (let* ((columns (/ (+ low high) 2))
+                      (short-name (truncate-string-to-width name columns nil nil "…"))
+                      (session (concat "in " (control short-name
+                                                     'agent-shell-inline-select-session))))
+                 (if (fits (concat session "  " controls))
+                     (setq best session low (1+ columns))
+                   (setq high (1- columns)))))
+             (when best (aligned best controls)))))
+      (let* ((essentials (string-join (list (control "Send" 'agent-shell-inline-send)
+                                           (control "Cancel" 'agent-shell-inline-quit)
+                                           (control "Help" 'agent-shell-inline-help)) ", "))
+             (details (concat (control (format "Including %s" (or agent-shell-inline--reference-type 'none))
+                                       'agent-shell-inline-cycle-reference)
+                              ", " essentials))
+             (compact (string-join (list (control nil 'agent-shell-inline-send)
+                                        (control nil 'agent-shell-inline-quit)
+                                        (control nil 'agent-shell-inline-help)) "  "))
+             (help (control nil 'agent-shell-inline-help)))
+        (concat " " (or (with-session details)
+                         (with-session essentials)
+                         (and (fits essentials) (aligned "" essentials))
+                         (and (fits compact) (aligned "" compact))
+                         (aligned "" help))
+                " ")))))
 
 (define-derived-mode agent-shell-inline-prompt-mode text-mode "Agent Inline"
   "Compose a prompt for an Agent Shell conversation without visiting it."
@@ -1385,7 +1601,7 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
 
 ;;;###autoload
 (defun agent-shell-inline-continue-recent ()
-  "Show the latest reply at point and compose in the recent inline conversation.
+  "Show the latest reply and compose in the last selected inline conversation.
 Reuse its history across source buffers without creating a new conversation."
   (interactive)
   (setq agent-shell-inline--recent
@@ -1397,41 +1613,40 @@ Reuse its history across source buffers without creating a new conversation."
                                  (and (agent-shell-inline--shell-p last) last)))
                              (buffer-list)))))
     (unless shell (user-error "No previous inline conversation is open; use SPC a p first"))
-    (let* ((history (with-current-buffer shell (shell-maker-history)))
-           (latest (car (last history)))
-           (active (buffer-local-value 'agent-shell-inline--active shell))
-           (active-context (and (overlayp active) (overlay-buffer active)
-                                (overlay-get active 'agent-shell-inline)))
-           (overlay (agent-shell-inline--setup-response-overlay
-                     (list :marker (point-marker) :window (selected-window) :buffer shell)))
-           (context (overlay-get overlay 'agent-shell-inline))
-           (busy (with-current-buffer shell (memq (agent-shell-status) '(busy blocked)))))
-      (setf (plist-get context :prompt) (car latest))
-      (overlay-put overlay 'agent-shell-inline-interaction-index (max 0 (1- (length history))))
-      (overlay-put overlay 'agent-shell-inline-history-total (length history))
-      (if busy
-          (agent-shell-inline--start-following overlay (car latest))
-        (overlay-put overlay 'agent-shell-inline-status (if latest "Latest reply" "Ready")))
-      (agent-shell-inline--update-response-overlay
-       (if (and active-context (buffer-live-p (plist-get active-context :src)))
-           (with-current-buffer (plist-get active-context :src)
-             (buffer-substring-no-properties (point-min) (point-max)))
-         (agent-shell-inline--history-response (cdr latest))) overlay)
-      (when active-context
-        (overlay-put overlay 'agent-shell-inline-review (overlay-get active 'agent-shell-inline-review))
-        (overlay-put overlay 'agent-shell-inline-message-group (overlay-get active 'agent-shell-inline-message-group)))
-      (setf (plist-get context :subscription)
-            (agent-shell-subscribe-to
-             :shell-buffer shell
-             :on-event (lambda (event) (agent-shell-inline--on-event overlay event))))
-      (agent-shell-inline--response-overlay-render overlay)
-      (agent-shell-inline overlay shell))))
+    (agent-shell-inline--continue-shell shell)))
+
+(defun agent-shell-inline-continue-session (name)
+  "Choose NAME and open a new inline preview and draft at point."
+  (interactive
+   (list (completing-read "Conversation: "
+                          (cons "New agent shell" (mapcar #'buffer-name (agent-shell-buffers)))
+                          nil t)))
+  (let ((shell (if (equal name "New agent shell")
+                   (agent-shell--new-shell :location default-directory :no-display t)
+                 (get-buffer name))))
+    (unless (agent-shell-inline--shell-p shell)
+      (user-error "Conversation is no longer available"))
+    (agent-shell-inline--continue-shell shell)))
+
+(defun agent-shell-inline--continue-shell (shell)
+  "Create a fresh preview and composer for SHELL at point."
+  (let* ((overlay (agent-shell-inline--setup-response-overlay
+                   (list :marker (point-marker) :window (selected-window) :buffer shell)))
+         (context (overlay-get overlay 'agent-shell-inline)))
+    (agent-shell-inline-latest-reply overlay)
+    (setf (plist-get context :subscription)
+          (agent-shell-subscribe-to
+           :shell-buffer shell
+           :on-event (lambda (event) (agent-shell-inline--on-event overlay event))))
+    (agent-shell-inline overlay shell)))
 
 ;;;###autoload
 (defun agent-shell-inline (&optional continue-overlay shell)
   "Compose inline, reusing SHELL or the source's project conversation.
 With a prefix argument, reuse the nearest CONTINUE-OVERLAY for a follow-up."
   (interactive (list (and current-prefix-arg (agent-shell-inline--response-overlay-at-point))))
+  (when (and (overlayp continue-overlay) (overlay-buffer continue-overlay))
+    (agent-shell-inline--focus-preview continue-overlay))
   (let* ((origin (point-marker))
          (window (selected-window))
          (shell (agent-shell-inline--resolve-shell
@@ -1448,38 +1663,54 @@ With a prefix argument, reuse the nearest CONTINUE-OVERLAY for a follow-up."
     (pop-to-buffer prompt agent-shell-inline-display-prompt-action)
     prompt))
 
-(defvar agent-shell-inline--last-visited-preview nil
-  "Last preview visited by `agent-shell-inline-visit'.")
+(defun agent-shell-inline-cycle ()
+  "Select the next inline preview in the current buffer, revealing it if needed."
+  (interactive)
+  (agent-shell-inline--cycle-previews (list (current-buffer))))
 
 (defun agent-shell-inline-visit ()
-  "Visit and centre an existing inline preview, cycling on subsequent calls."
+  "Select the next inline preview across all buffers, revealing it if needed."
   (interactive)
+  (agent-shell-inline--cycle-previews
+   (sort (buffer-list) (lambda (a b) (string-lessp (buffer-name a) (buffer-name b))))))
+
+(defun agent-shell-inline--cycle-previews (buffers)
+  "Cycle previews in BUFFERS, preserving their buffer and source order."
   (let (previews)
-    ;; Stable ordering survives the buffer list changing as we visit previews.
-    (dolist (buffer (sort (buffer-list)
-                          (lambda (a b) (string-lessp (buffer-name a) (buffer-name b)))))
+    (dolist (buffer buffers)
       (with-current-buffer buffer
-        (let ((overlays (append (car (overlay-lists)) (cdr (overlay-lists)))))
+        (save-restriction
+          (widen)
           (setq previews
                 (nconc previews
                        (sort (seq-filter (lambda (ov) (overlay-get ov 'agent-shell-inline))
-                                         overlays)
+                                         (overlays-in (point-min) (point-max)))
                              (lambda (a b) (< (overlay-start a) (overlay-start b)))))))))
     (unless previews
-      (user-error "No inline previews open"))
-    (let* ((remaining (cdr (memq agent-shell-inline--last-visited-preview previews)))
-           (overlay (or (car remaining) (car previews))))
-      (setq agent-shell-inline--last-visited-preview overlay)
+      (user-error "No inline previews in these buffers"))
+    (let* ((selected agent-shell-inline--selected-preview)
+           (current (and (memq selected previews)
+                         (eq (overlay-buffer selected) (current-buffer)) selected))
+           (overlay (or (cadr (memq current previews)) (car previews))))
       (agent-shell-inline--visit-preview overlay))))
 
 (defun agent-shell-inline--visit-preview (overlay)
-  "Visit OVERLAY and centre its response in the selected window."
-  (pop-to-buffer-same-window (overlay-buffer overlay))
-  (set-window-hscroll nil 0)
-  (goto-char (overlay-start overlay))
-  (agent-shell-inline--response-overlay-render overlay)
-  (let ((height (1+ (cl-count ?\n (or (overlay-get overlay 'after-string) "")))))
-    (recenter (max 0 (/ (- (window-body-height) height) 2)))))
+  "Select OVERLAY, revealing it only when it is outside the current view."
+  (let* ((buffer (overlay-buffer overlay))
+         (window (if (eq (window-buffer) buffer)
+                     (selected-window)
+                   (get-buffer-window buffer)))
+         (visible (and window (pos-visible-in-window-p (overlay-end overlay) window))))
+    (if window (select-window window) (pop-to-buffer-same-window buffer))
+    (agent-shell-inline--focus-preview overlay)
+    (unless visible
+      (set-window-hscroll nil 0)
+      (when (or (< (overlay-start overlay) (point-min)) (> (overlay-start overlay) (point-max)))
+        (widen))
+      (goto-char (overlay-start overlay))
+      (agent-shell-inline--response-overlay-render overlay)
+      (let ((height (1+ (cl-count ?\n (or (overlay-get overlay 'after-string) "")))))
+        (recenter (max 0 (/ (- (window-body-height) height) 2)))))))
 
 (defun agent-shell-inline-reply ()
   "Compose a reply to the inline preview selected by the current position."
@@ -1556,11 +1787,13 @@ Without a preview, show the response at point.  Attach no source reference."
              (let ((context (overlay-get overlay 'agent-shell-inline)))
                (and context
                     (or (not shell) (eq (get-buffer shell) (plist-get context :buffer))))))
-           (append (car (overlay-lists)) (cdr (overlay-lists)))))
-         (preview (car (sort previews
-                             (lambda (a b)
-                               (< (abs (- (point) (overlay-start a)))
-                                  (abs (- (point) (overlay-start b)))))))))
+           (overlays-in (point-min) (point-max))))
+         (selected (agent-shell-inline--response-overlay-at-point))
+         (preview (or (and (memq selected previews) selected)
+                      (car (sort previews
+                                 (lambda (a b)
+                                   (< (abs (- (point) (overlay-start a)))
+                                      (abs (- (point) (overlay-start b))))))))))
     (agent-shell-inline--send
      text (list :marker (point-marker)
                 :buffer (agent-shell-inline--resolve-shell
@@ -1576,15 +1809,31 @@ Without a preview, show the response at point.  Attach no source reference."
                           nil t)))
   (unless (derived-mode-p 'agent-shell-inline-prompt-mode)
     (user-error "Switch conversations from an inline prompt"))
-  (let* ((origin (marker-buffer (plist-get agent-shell-inline--context :marker)))
+  (let* ((marker (plist-get agent-shell-inline--context :marker))
+         (origin (marker-buffer marker))
          (shell (if (equal name "New agent shell")
                     (agent-shell--new-shell :location default-directory :no-display t)
                   (get-buffer name))))
-    (unless (agent-shell-inline--shell-p shell) (user-error "Conversation is no longer available"))
-    (setf (plist-get agent-shell-inline--context :buffer) shell
-          (plist-get agent-shell-inline--context :response-ov) nil)
+    (unless (agent-shell-inline--shell-p shell)
+      (user-error "Conversation is no longer available"))
+    (unless (eq shell (plist-get agent-shell-inline--context :buffer))
+      (setf (plist-get agent-shell-inline--context :buffer) shell
+            (plist-get agent-shell-inline--context :response-ov)
+            (when (buffer-live-p origin)
+              (with-current-buffer origin
+                (let ((previews
+                       (seq-filter
+                        (lambda (overlay)
+                          (eq shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer)))
+                        (overlays-in (point-min) (point-max)))))
+                  (car (sort previews
+                             (lambda (a b)
+                               (< (abs (- marker (overlay-start a)))
+                                  (abs (- marker (overlay-start b))))))))))))
+    (setq agent-shell-inline--recent (cons shell (delq shell agent-shell-inline--recent)))
     (when (buffer-live-p origin)
-      (with-current-buffer origin (setq agent-shell-inline--last shell)))))
+      (with-current-buffer origin (setq agent-shell-inline--last shell)))
+    (force-mode-line-update t)))
 
 (defun agent-shell-inline-visit-buffer (&optional shell)
   "Visit SHELL, or the conversation associated with this prompt or preview.
@@ -1623,7 +1872,8 @@ Use C-g to restore the previous window layout."
       (agent-shell-inline--hide-help)
     (unless (buffer-live-p agent-shell-inline--help-buffer)
       (setq agent-shell-inline--help-buffer (generate-new-buffer "*agent-shell-inline-help*")))
-    (let ((shell (plist-get agent-shell-inline--context :buffer)))
+    (let ((shell (plist-get agent-shell-inline--context :buffer))
+          (prompt (current-buffer)))
       (with-current-buffer agent-shell-inline--help-buffer
         (let ((inhibit-read-only t))
           (erase-buffer)
@@ -1631,32 +1881,35 @@ Use C-g to restore the previous window layout."
                       cursor-type nil
                       mode-line-format nil)
           (insert (propertize "Agent Shell Inline — options\n\n" 'face 'outline-3))
-          (make-vtable
-           :columns (list (make-vtable-column :name "Keybinding" :width 20) "Command")
-           :objects
-           (mapcar
-            (lambda (entry)
-              (list (agent-shell-inline--key-description (car entry)) (cadr entry)))
-            `((agent-shell-inline-send "Send prompt and respond inline")
-              (agent-shell-inline-cycle-reference "Include context around point; repeat with .")
-              (agent-shell-inline-append "Append prompt + context; prefix argument keeps prompt open")
-              (agent-shell-inline-visit-buffer
-               ,(format "Visit active conversation [%s]"
-                        (propertize (or (and (buffer-live-p shell) (buffer-name shell)) "NONE")
-                                    'face 'font-lock-escape-face)))
-              (agent-shell-inline-switch-buffer "Change conversation, or start a new one")
-              (agent-shell-inline-quit "Cancel and quit")
-              (agent-shell-inline-help "Toggle this options panel")))
-           :insert t)
+          (insert (format "%-20s  %s\n"
+                          (propertize "Keybinding" 'face 'bold)
+                          (propertize "Command" 'face 'bold)))
+          (dolist (entry
+                   `((agent-shell-inline-send "Send prompt and respond inline")
+                     (agent-shell-inline-cycle-reference "Include context around point; repeat with .")
+                     (agent-shell-inline-append "Append prompt + context; prefix argument keeps prompt open")
+                     (agent-shell-inline-visit-buffer
+                      ,(format "Visit active conversation [%s]"
+                               (propertize (or (and (buffer-live-p shell) (buffer-name shell)) "NONE")
+                                           'face 'font-lock-escape-face)))
+                     (agent-shell-inline-switch-buffer "Change conversation, or start a new one")
+                     (agent-shell-inline-quit "Cancel and quit")
+                     (agent-shell-inline-help "Toggle this options panel")))
+            (insert (format "%-20s  %s\n"
+                            (agent-shell-inline--prompt-control
+                             prompt (agent-shell-inline--key-description (car entry)) (car entry))
+                            (cadr entry))))
           (goto-char (point-max))
           (insert (format "\nResponse: %s reply, %s actions, %s navigate\n"
-                          (agent-shell-inline--key-description 'agent-shell-inline-reply)
-                          (agent-shell-inline--key-description 'agent-shell-inline--response-overlay-dispatch)
-                          (agent-shell-inline--key-description 'agent-shell-inline-navigate)))
+                          (substring-no-properties (agent-shell-inline--key-description 'agent-shell-inline-reply))
+                          (substring-no-properties (agent-shell-inline--key-description 'agent-shell-inline--response-overlay-dispatch))
+                          (substring-no-properties (agent-shell-inline--key-description 'agent-shell-inline-navigate))))
           (insert "Navigation: j/k scroll, J/K newer/older replies, C-d/C-u page, g live, Esc/q exit.\n")
           (when (bound-and-true-p evil-mode)
             (insert (format "\nPress Esc, then %s to send. Insert-state RET adds a newline.\n"
-                            (agent-shell-inline--key-description 'agent-shell-inline-send))))
+                            (agent-shell-inline--prompt-control
+                             prompt (agent-shell-inline--key-description 'agent-shell-inline-send)
+                             'agent-shell-inline-send))))
           (insert "\nRequests share conversation history; choose a new conversation for a fresh start.\n")
           (insert "Visit the conversation for tools and review; C-g returns to your source layout.\n")
           (goto-char (point-min))

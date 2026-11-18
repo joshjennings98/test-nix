@@ -200,3 +200,17 @@
                    (lambda (_) (ert-fail "Closed an unread alert"))))
           (agent-shell-completion-notify--dismiss-viewed)
           (should agent-shell-completion-notify--pending))))))
+
+(ert-deftest josh/completion-notify-retained-reply-does-not-dismiss-new-turn ()
+  (josh/with-inline-agent
+    (let ((overlay (agent-shell-inline-message "original" shell)))
+      (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get overlay 'agent-shell-inline-status))))
+      (with-current-buffer shell
+        (agent-shell-insert :text "new completion" :submit t :no-focus t :shell-buffer shell))
+      (josh/inline-wait (lambda () (eq (agent-shell-status :shell-buffer shell) 'ready)))
+      (cl-letf (((symbol-function 'pos-visible-in-window-p) (lambda (&rest _) t))
+                ((symbol-function 'select-frame-set-input-focus) #'ignore))
+        (should-not (agent-shell-completion-notify--viewed-p shell))
+        (agent-shell-completion-notify--visit shell)
+        (should (string-match-p "new completion" (overlay-get overlay 'after-string)))
+        (should (agent-shell-completion-notify--viewed-p shell))))))

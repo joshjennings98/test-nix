@@ -43,7 +43,14 @@ agent checks when upgrading because the extensions use Agent Shell APIs.
 | SPC a a | Open Agent Shell |
 | SPC a p | Discuss the selection or source context inline |
 | SPC a r | Reply to an inline conversation |
-| SPC a l | Show the latest reply here and compose a follow-up |
+| SPC a l | Continue the last selected inline session here |
+| SPC a L | Pick a session and open a new inline preview and draft |
+| SPC a S | Switch the selected inline preview or draft's session |
+| SPC a c | Cycle inline previews in the current buffer |
+| SPC a C | Cycle inline previews across all buffers |
+| SPC a i r | Send the selected region to Agent Shell |
+| SPC a y / Y | Approve one / all currently pending permissions |
+| SPC a g | Jump to the latest reply in the selected preview |
 | SPC a P | Visit or cycle existing previews |
 | SPC a n | Navigate a reply without moving the source cursor |
 | SPC a v | Review pending permissions or visit the conversation |
@@ -92,3 +99,48 @@ Unresolved design findings now carry navigable deterministic context. The
 implementation reviewer can record a separate, cited agent assessment without
 changing UNKNOWN into PASS. Source freshness is checked independently; see
 =configs/doom/docs/design-review.org= for the snapshot boundary and refresh rules.
+
+* Inline sessions and retained replies
+
+Click the highlighted =SPC a S= beside a session name, or type that shortcut,
+to change the selected preview or draft's conversation.
+Completed previews keep their replies when other prompts run in the same session.
+A newer-reply count and a clickable =SPC a g= shortcut for Latest reply appear in the header;
+use that action without entering navigation, or browse with =SPC a n= and =J/K=.
+Only key bindings are highlighted action buttons. Plain labels select the preview,
+and session names use the faint =shadow= face. Reply content is never dimmed.
+
+A failed follow-up keeps the previous preview and the unsent draft. Streaming
+updates are batched, and status text replaces the separate waiting animation.
+
+Selecting or creating a session updates =SPC a l= immediately, even before you
+send a message. Switching a draft to an existing session in the same file reuses
+that session's preview. =SPC m b= also switches the draft's destination.
+
+=SPC a c= and =SPC a C= select previews without opening a draft. Visible
+previews keep their screen position; only off-screen previews are brought into view.
+Reply, quick-message and session-switch commands use that selection, including
+when previews share an attachment line. =SPC a L= always creates a fresh preview
+at point, leaving existing previews intact. =SPC a P= remains an alias for
+cycling across buffers.
+
+The composer places =Cancel: :q= immediately beside =Send: :wq=. Only =:q=
+and =:wq= are clickable, matching the keyboard actions.
+
+The focused preview's faint session name is bold; other session names stay faint
+at normal weight. Creating or cycling to a preview selects it for keyboard actions;
+moving the source cursor alone does not change that selection. Scrolling another
+preview with the wheel or its arrows changes only that preview's scroll position,
+without changing focus, the selected window or the source cursor.
+
+Plain response labels and session names can be dragged to move the preview.
+A plain click focuses the preview without activating a control; only highlighted
+shortcuts run their displayed actions.
+
+The input header adapts to the popup width. It shortens long session names first,
+then drops context details or uses shortcut-only controls. Send, Cancel and Help
+have priority; very narrow windows retain Help for access to the full options.
+
+Highlighted composer shortcuts are clickable in both the input header and its
+Help panel. Clicking selects the owning draft's window before running the action,
+even if another window was selected. The response-key legend is plain help text.

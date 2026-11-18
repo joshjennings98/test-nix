@@ -60,7 +60,7 @@ Use the reply's sender for signal dispatch, avoiding a synchronous owner query."
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
         (when agent-shell-inline--response-overlay-mode
-          (dolist (overlay (append (car (overlay-lists)) (cdr (overlay-lists))))
+          (dolist (overlay (overlays-in (point-min) (point-max)))
             (when (eq shell (plist-get (overlay-get overlay 'agent-shell-inline) :buffer))
               (push overlay previews))))))
     previews))
@@ -76,6 +76,8 @@ Use the reply's sender for signal dispatch, avoiding a synchronous owner query."
               (lambda (overlay)
                 (and (eq (overlay-buffer overlay) buffer)
                      (not (overlay-get overlay 'agent-shell-inline-history-source))
+                     (= (or (overlay-get overlay 'agent-shell-inline-interaction-index) -1)
+                        (1- (with-current-buffer shell (length (shell-maker-history)))))
                      (pos-visible-in-window-p (overlay-start overlay) window)))
               (agent-shell-completion-notify--previews shell))))))
 
@@ -104,7 +106,7 @@ Use the reply's sender for signal dispatch, avoiding a synchronous owner query."
     (select-frame-set-input-focus (selected-frame))
     (if-let* ((overlay (car (agent-shell-completion-notify--previews shell))))
         (progn
-          (agent-shell-inline--show-live overlay)
+          (agent-shell-inline-latest-reply overlay)
           (agent-shell-inline--visit-preview overlay))
       (pop-to-buffer-same-window shell))
     ;; i3's smart activation policy does not switch to another workspace.
