@@ -107,18 +107,62 @@ function .. --description "Go up N directories"
     end
 end
 
-function Git --description "Clone (if necessary) project into ~/Git"
-    if count $argv >/dev/null
-        if test -d ~/Git/$argv[1]
-            cd ~/Git/$argv[1]
-        else
-            cd ~/Git
-            git clone https://github.com/Arm-Debug/$argv[1]
-            cd $argv[1]
-        end
-    else
-        cd ~/Git
+function Git --description "Clone projects and manage git worktrees"
+    set -l root ~/Git
+
+    if test (count $argv) -eq 0
+        cd $root
+        return
     end
+
+    set -l repo $argv[1]
+    set -l dir $root/$repo
+    set -l bare $dir/.bare
+
+    if not test -d $bare
+        mkdir -p $dir
+        git clone --bare https://github.com/Arm-Debug/$repo $bare; or return
+    end
+
+    git --git-dir=$bare config --replace-all \
+        remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+
+    if not test -d $dir/main
+        git --git-dir=$bare worktree add $dir/main main; or return
+    end
+
+    if test (count $argv) -eq 1
+        cd $dir/main
+        return
+    end
+
+    set -l branch $argv[2]
+
+    if test -d $dir/$branch
+        cd $dir/$branch
+        return
+    end
+
+    git --git-dir=$bare fetch --prune origin; or return
+    mkdir -p (dirname $dir/$branch)
+
+    if git --git-dir=$bare show-ref --verify --quiet refs/heads/$branch
+        git --git-dir=$bare worktree add \
+            $dir/$branch $branch
+
+    else if git --git-dir=$bare show-ref --verify --quiet refs/remotes/origin/$branch
+        git --git-dir=$bare worktree add \
+            --track -b $branch \
+            $dir/$branch origin/$branch
+
+    else
+        git --git-dir=$bare worktree add \
+            -b $branch \
+            $dir/$branch main
+    end
+
+    or return
+    cd $dir/$branch
 end
 
 function password --description "Copy password (or set an environment variable if 'envvar' in Tags) using keepassxc"
@@ -195,6 +239,9 @@ function fish_prompt
     echo -n "➤  "
     set_color normal
 end
+
+# bring back blue commands
+set fish_color_command blue
 
 # PATH
 fish_add_path $HOME/.local/bin

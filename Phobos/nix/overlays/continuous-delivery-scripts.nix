@@ -1,5 +1,5 @@
 { pkgs ? import <nixpkgs> { } }:
-with pkgs.python311Packages;
+with pkgs.python313Packages;
 
 buildPythonPackage rec {
   pname = "continuous-delivery-scripts";

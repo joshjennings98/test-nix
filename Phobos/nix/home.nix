@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 let
-  cfg = ./.;
-  overlays = "${cfg}/overlays";
+  cfg = ./..;
+  overlays = ./overlays;
   homedir = "/home/josjen01";
 in
 {
@@ -18,7 +18,9 @@ in
   };
 
   imports = [
-    ./i3.nix
+    ./git.nix
+    (import ./i3.nix { cfg = "${cfg}"; })
+    (import ./ai.nix { cfg = "${cfg}"; })
   ];
 
   home.username = "josjen01";
@@ -50,9 +52,10 @@ in
     keepassxc
     kubectl
     kubernetes-helm
+    nerd-fonts.symbols-only
     networkmanager
     nil
-    nodePackages.bash-language-server
+    bash-language-server
     openapi-generator-cli
     ripgrep
     sops
@@ -61,16 +64,15 @@ in
     tree
     xclip
     xdotool
-    xfce.thunar
-    xfce.thunar-archive-plugin
+    thunar
+    thunar-archive-plugin
     yaml-language-server
     yq-go
     wmctrl
   ];
 
   home.file.".aws/config".source = "${cfg}/aws/config"; 
-  home.file.".aws/credentials".source = "${cfg}/aws/credentials"; 
-  home.file."Git/.keep".text = "ensure ~/Git directory exists";
+  home.file.".aws/credentials".source = "${cfg}/aws/credentials";
 
   programs.fish = {
     enable = true;
@@ -80,26 +82,7 @@ in
   
   home.file."fish/completions/kubectl".source = "${cfg}/fish/completions/kubectl"; 
 
-  programs.difftastic.enable = true;
-  
   programs.fzf.enable = true;
-
-  programs.git = {
-    enable = true;
-    settings = {
-      push.autoSetupRemote = true;
-      user = {
-        name = "joshjennings98";
-        email = "josh.jennings@arm.com";
-      };
-    };
-  };
-
-  # NOTE: See this issue is still happening nix-community/home-manager/issues/1654
-  programs.gh = {
-    enable = true;
-    gitCredentialHelper.enable = true; # should work for private go modules tool
-  };
 
   programs.kitty = {
     enable = true;
@@ -119,10 +102,10 @@ in
     enable = true;
     defaultEditor = true;
     settings = lib.importTOML "${cfg}/helix/config.toml";    
-    languages = lib.importTOML "${cfg}/helix/languages.toml";    
+    languages = lib.importTOML "${cfg}/helix/languages.toml";
   };
 
-  nixGL = {
+  targets.genericLinux.nixGL = {
     packages = pkgs.nixgl;
     vulkan.enable = true;
   };
@@ -187,5 +170,5 @@ in
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
-  home.stateVersion = "25.11"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
+  home.stateVersion = "26.05"; # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
 }

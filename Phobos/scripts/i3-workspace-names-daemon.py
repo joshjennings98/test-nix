@@ -2,23 +2,28 @@
 
 import argparse
 import i3ipc  # This package works for both i3 and Sway
-
+from collections import defaultdict
 
 def build_rename(i3, args):
     delim = args.delimiter
     length = args.max_title_length
     uniq = args.uniq
 
+    map = defaultdict(str)
+    map["firefox_firefox"] = "firefox" # TODO: make configurable
+
     def get_name(leaf, length):
-        for identifier in ["app_id", "name", "window_title"]:
+        for identifier in ["window_class", "window_instance"]: # TODO: ultrawide option
             name = getattr(leaf, identifier, None)
             if name and name.strip():
+                if n := map[name]:
+                    name = n
                 return (
                     name[:length]
                     .replace(":", "")
                     .replace("│", "")
                     .replace("&", "+")
-                    .lower()
+                    .title() # TODO: also should be option
                     .strip()
                 )
         return "?"
@@ -61,7 +66,7 @@ def main():
         description="Dynamically update Sway workspace names based on the applications running in each."
     )
     parser.add_argument(
-        "-d", "--delimiter", help="Delimiter to separate window names.", default=" │ "
+        "-d", "--delimiter", help="Delimiter to separate window names.", default=", "
     )
     parser.add_argument(
         "-l", "--max_title_length", help="Max title length.", default=32, type=int
@@ -71,13 +76,13 @@ def main():
         "--uniq",
         help="Remove duplicate names.",
         action="store_true",
-        default=False,
+        default=True,
     )
     args = parser.parse_args()
 
     i3 = i3ipc.Connection()  # Connects to Sway as well
     rename = build_rename(i3, args)
-    for event in ["window::move", "window::new", "window::title", "window::close"]:
+    for event in ["window::move", "window::new", "window::close"]:
         i3.on(event, rename)
     i3.main()
 

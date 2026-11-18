@@ -1,4 +1,4 @@
-{ pkgs, lib, python3Packages ? pkgs.python311Packages }:
+{ cfg, ... }: { pkgs, lib, python3Packages ? pkgs.python311Packages }:
 
 let
     generateRequirements = requirements:
@@ -50,7 +50,7 @@ EOF
 
             doCheck = false;
 
-            meta = with lib; {
+            meta = {
                 inherit description;
             };
         };
@@ -66,7 +66,14 @@ let
         name = "i3-workspace-names-daemon";
         version = "0.0.1";
         description = "Python script to auto-rename workspaces based on content";
-        src = ./scripts;
+        src = "${cfg}/scripts";
+        requirements = "i3ipc";
+    };
+    alternatingLayouts = createPythonPackage {
+        name = "i3-alternating-layouts-daemon";
+        version = "0.0.1";
+        description = "Python script to alternate layouts for new workspaces";
+        src = "${cfg}/scripts";
         requirements = "i3ipc";
     };
 in
@@ -76,6 +83,5 @@ in
     # dependencies can be specified in the requirements which is a newline delimited
     # list of python packages (note: their names need to be the same in pypi and nix)
     workspaceNames = workspaceNames.wrapper;
+    alternatingLayouts = alternatingLayouts.wrapper;
 }
-
-

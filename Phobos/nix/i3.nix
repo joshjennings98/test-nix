@@ -1,18 +1,18 @@
-{ config, pkgs, lib, ... }:
+{ cfg, ...}: { config, pkgs, lib, ... }:
 {
   nixpkgs = {
     overlays = [
       (final: pre: {
         dmenu = pre.dmenu.overrideAttrs (oldAttrs: { # https://news.ycombinator.com/item?id=30069486
           patches = [
-            ./dmenu/fuzzymatch.diff
-            ./dmenu/highlight.diff
+            "${cfg}/dmenu/fuzzymatch.diff"
+            "${cfg}/dmenu/highlight.diff"
           ];
           # as of 16/01/2025 the package needs the '-lm' flags set but hasn't done it upstream
           NIX_LDFLAGS = "${oldAttrs.NIX_LDFLAGS or ""} -lm";
         });
       })
-      (final: pre: { pythonScripts = pre.callPackage (import ./scripts/python-scripts.nix) { inherit pkgs lib; }; })
+      (final: pre: { pythonScripts = pre.callPackage (import ./python-scripts.nix { cfg = "${cfg}"; }) { inherit pkgs lib; }; })
     ];
     config.allowUnfree = true;
   };
@@ -23,16 +23,17 @@
     brightnessctl
     dmenu
     pamixer
+    pythonScripts.alternatingLayouts
     pythonScripts.workspaceNames
     srandrd
-    xorg.xrandr
+    xrandr
   ];
 
-  programs.feh.enable = true;
-
-  home.file."Pictures/Wallpapers/wallpaper.jpg".source = ./assets/wallpaper.jpg;
+  home.file."Pictures/Wallpapers/wallpaper.jpg".source = "${cfg}/assets/wallpaper.jpg";
 
   home.file.".config/nix/nix.conf".text = "experimental-features = nix-command flakes";
+
+  programs.feh.enable = true;
 
   home.file."setup.sh" = {
     executable = true;
@@ -64,7 +65,7 @@
   };
 
   programs.autorandr = {
-    enable = false;
+    enable = true;
     profiles = {
       "work" = {
         fingerprint = {
@@ -153,32 +154,37 @@
           size = 12.0;
         };
       }];
-      startup = [ 
-        { command = ''exec --no-startup-id "monitors --force"''; }
-        { command = "exec --no-startup-id systemctl --user start nm-applet.service"; }
-        { command = ''exec --no-startup-id "srandrd monitors --force''; }
-        { command = "exec --no-startup-id i3-workspace-names-daemon"; }
-        { command = ''exec --no-startup-id "xss-lock -- lock-script"''; }
-        { command = "exec --no-startup-id blueman-applet"; }
+      startup = [
+        { command = "i3-workspace-names-daemon"; }
+        { command = "i3-alternating-layouts-daemon"; }
+        { command = "monitors --force"; notification = false; }
+        { command = "srandrd monitors --force"; notification = false; }
+        { command = "xss-lock -- lock-script"; notification = false; }
+        { command = "${pkgs.blueman}/bin/blueman-applet"; }
         { command = "slack"; }
         { command = "firefox"; }
       ];
       assigns = {
         "number 2" = [{ class = "firefox"; }];
         "number 3" = [{ class = "^Slack$"; }];
+        "number 4" = [{ class = "zoom"; }];
       };
       workspaceOutputAssign = [
         {
-          output = "eDP-1";
-          workspace = "3";
+          output = "DP-2-1-8";
+          workspace = "1";
         }
         {
           output = "DP-2-2";
           workspace = "2";
         }
         {
-          output = "DP-2-1-8";
-          workspace = "1";
+          output = "eDP-1";
+          workspace = "3";
+        }
+        {
+          output = "eDP-1";
+          workspace = "4";
         }
       ];
       window = {
@@ -223,6 +229,8 @@
         "${modifier}+Shift+i"   = "move container to workspace number 8";
         "${modifier}+Shift+o"   = "move container to workspace number 9";
         "${modifier}+Shift+p"   = "move container to workspace number 10";
+        "${modifier}+Tab"       = "workspace next";
+        "${modifier}+Shift+Tab" = "workspace prev";
         "XF86AudioMicMute"      = "exec pamixer --default-source -t";
         "XF86AudioMute"         = "exec pamixer -t";
         "XF86AudioRaiseVolume"  = "exec pamixer -i 5";
@@ -286,8 +294,8 @@
             format = " $timestamp.datetime(f:'%a %d %h - %R') ";
             interval = 10;
             click = [
-              { button = "left";  cmd = "lock-script"; }
-              { button = "right"; cmd = "i3-nagbar -t warning -m 'Do you want to reboot or shutdown?' -b 'shutdown' 'i3-msg exec shutdown 0' -b 'reboot' 'i3-msg exec reboot'"; }
+              { button = "right";  cmd = "lock-script"; }
+              { button = "left"; cmd = "i3-nagbar -t warning -m 'Do you want to reboot or shutdown?' -b 'shutdown' 'i3-msg exec shutdown 0' -b 'reboot' 'i3-msg exec reboot'"; }
             ];
           }
         ];
@@ -299,7 +307,7 @@
     executable = true;
     text = ''
       #!/usr/bin/env bash
-      if [ -n "$SRANDRD_OUTPUT" && -n "$SRANDRD_EVENT" ]; then
+      if [[ -n "$SRANDRD_OUTPUT" && -n "$SRANDRD_EVENT" ]]; then
         echo "srandrd: $SRANDRD_OUTPUT $SRANDRD_EVENT"
       fi
 
@@ -327,9 +335,6 @@
     text = ''
       #!/usr/bin/env bash
       i3lock -n -c 000000
-      sleep 0.5
-      monitors --force
     '';
   };
 }
-
