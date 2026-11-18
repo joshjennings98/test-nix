@@ -43,7 +43,7 @@ agent checks when upgrading because the extensions use Agent Shell APIs.
 | SPC a a | Open Agent Shell |
 | SPC a p | Discuss the selection or source context inline |
 | SPC a r | Reply to an inline conversation |
-| SPC a l | Continue the latest inline conversation here |
+| SPC a l | Show the latest reply here and compose a follow-up |
 | SPC a P | Visit or cycle existing previews |
 | SPC a n | Navigate a reply without moving the source cursor |
 | SPC a v | Review pending permissions or visit the conversation |

@@ -546,3 +546,44 @@
             (should (= 1 (overlay-get overlay 'agent-shell-inline-scroll-index))))
         (when-let* ((exit (overlay-get overlay 'agent-shell-inline-navigation-exit)))
           (funcall exit))))))
+
+(ert-deftest josh/inline-continue-recent-shows-preview-before-sending ()
+  (josh/with-inline-agent
+    (let ((first (agent-shell-inline-message "first reply" shell))
+          (document (generate-new-buffer " *inline-immediate-preview*")))
+      (unwind-protect
+          (progn
+            (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get first 'agent-shell-inline-status))))
+            (switch-to-buffer document)
+            (insert "Another source\n")
+            (agent-shell-inline-continue-recent)
+            (let ((preview (plist-get agent-shell-inline--context :response-ov)))
+              (should (eq (overlay-buffer preview) document))
+              (should (string-match-p "first reply" (overlay-get preview 'after-string)))
+              (agent-shell-inline-write-and-quit)
+              (should (overlay-buffer preview))
+              (with-current-buffer shell
+                (should (= 1 (length (shell-maker-history))))
+                (agent-shell-insert :text "later reply" :submit t :no-focus t :shell-buffer shell))
+              (josh/inline-wait (lambda () (string-match-p "later reply" (overlay-get preview 'after-string))))
+              (should (string-match-p "later reply" (overlay-get first 'after-string)))))
+        (kill-buffer document)))))
+
+(ert-deftest josh/inline-continue-recent-attaches-during-a-turn ()
+  (josh/with-inline-agent
+    (let ((first (agent-shell-inline-message "TEST_HOLD" shell))
+          (document (generate-new-buffer " *inline-live-preview*")))
+      (unwind-protect
+          (progn
+            (josh/inline-wait (lambda () (string-match-p "Waiting for interruption" (overlay-get first 'after-string))))
+            (switch-to-buffer document)
+            (insert "Another source\n")
+            (agent-shell-inline-continue-recent)
+            (let ((preview (plist-get agent-shell-inline--context :response-ov)))
+              (should (string-match-p "Waiting for interruption" (overlay-get preview 'after-string)))
+              (should (overlay-get preview 'agent-shell-inline-timer))
+              (agent-shell-inline-write-and-quit)
+              (with-current-buffer shell (agent-shell-interrupt))
+              (josh/inline-wait (lambda () (string-prefix-p "Finished" (overlay-get preview 'agent-shell-inline-status))))
+              (should-not (overlay-get preview 'agent-shell-inline-timer))))
+        (kill-buffer document)))))

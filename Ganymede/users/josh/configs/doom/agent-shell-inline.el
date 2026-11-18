@@ -1385,7 +1385,7 @@ Only the display copy is wrapped; the response buffer retains the agent's text."
 
 ;;;###autoload
 (defun agent-shell-inline-continue-recent ()
-  "Compose at point in the most recently used live inline conversation.
+  "Show the latest reply at point and compose in the recent inline conversation.
 Reuse its history across source buffers without creating a new conversation."
   (interactive)
   (setq agent-shell-inline--recent
@@ -1397,7 +1397,35 @@ Reuse its history across source buffers without creating a new conversation."
                                  (and (agent-shell-inline--shell-p last) last)))
                              (buffer-list)))))
     (unless shell (user-error "No previous inline conversation is open; use SPC a p first"))
-    (agent-shell-inline nil shell)))
+    (let* ((history (with-current-buffer shell (shell-maker-history)))
+           (latest (car (last history)))
+           (active (buffer-local-value 'agent-shell-inline--active shell))
+           (active-context (and (overlayp active) (overlay-buffer active)
+                                (overlay-get active 'agent-shell-inline)))
+           (overlay (agent-shell-inline--setup-response-overlay
+                     (list :marker (point-marker) :window (selected-window) :buffer shell)))
+           (context (overlay-get overlay 'agent-shell-inline))
+           (busy (with-current-buffer shell (memq (agent-shell-status) '(busy blocked)))))
+      (setf (plist-get context :prompt) (car latest))
+      (overlay-put overlay 'agent-shell-inline-interaction-index (max 0 (1- (length history))))
+      (overlay-put overlay 'agent-shell-inline-history-total (length history))
+      (if busy
+          (agent-shell-inline--start-following overlay (car latest))
+        (overlay-put overlay 'agent-shell-inline-status (if latest "Latest reply" "Ready")))
+      (agent-shell-inline--update-response-overlay
+       (if (and active-context (buffer-live-p (plist-get active-context :src)))
+           (with-current-buffer (plist-get active-context :src)
+             (buffer-substring-no-properties (point-min) (point-max)))
+         (agent-shell-inline--history-response (cdr latest))) overlay)
+      (when active-context
+        (overlay-put overlay 'agent-shell-inline-review (overlay-get active 'agent-shell-inline-review))
+        (overlay-put overlay 'agent-shell-inline-message-group (overlay-get active 'agent-shell-inline-message-group)))
+      (setf (plist-get context :subscription)
+            (agent-shell-subscribe-to
+             :shell-buffer shell
+             :on-event (lambda (event) (agent-shell-inline--on-event overlay event))))
+      (agent-shell-inline--response-overlay-render overlay)
+      (agent-shell-inline overlay shell))))
 
 ;;;###autoload
 (defun agent-shell-inline (&optional continue-overlay shell)
