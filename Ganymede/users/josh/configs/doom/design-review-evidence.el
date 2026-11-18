@@ -1,4 +1,4 @@
-;;; design-review-evidence.el --- Navigable uncertainty and advisory assessments -*- lexical-binding: t; -*-
+;;; design-review-evidence.el --- Freshness of advisory assessments -*- lexical-binding: t; -*-
 
 (require 'design-review)
 
@@ -84,117 +84,14 @@ outside this repository are outside this freshness boundary."
             (when (equal saved buffer-file-name)
               (design-review-refresh-evidence))))))))
 
-(defun design-review--uncertainties (document)
-  "Return graph findings requiring attention, keyed by block and rule."
-  (let (items)
-    (dolist (check (append (plist-get document :checks) nil))
-      (dolist (finding (append (alist-get 'findings (alist-get 'result check)) nil))
-        (when (equal (alist-get 'status finding) "UNKNOWN")
-          (push `((key . ,(concat (alist-get 'id check) "/" (alist-get 'id finding)))
-                  (finding . ,finding)) items))))
-    (nreverse items)))
-
-(defun design-review--uncertainty-brief (block document)
-  "Give the implementation reviewer deterministic uncertainty to assess."
-  (when (equal (plist-get block :language) "implementation-review")
-    (concat
-     "\n\nDeterministic unresolved findings (do not change their UNKNOWN verdicts):\n"
-     (json-encode (vconcat (design-review--uncertainties document)))
-     "\nFor each key, add an entry to the final JSON field uncertainty_assessments: "
-     "{\"key\":\"exact supplied key\",\"assessment\":\"checked_no_concern|concern|inconclusive\","
-     "\"rationale\":\"what you inspected and its limitations\",\"citations\":[{\"file\":\"relative source path\",\"line\":1}]}. "
-     "No concern and concern require source citations. Analysis-blocked findings must be inconclusive. "
-     "An agent assessment is advisory, never verification. Inspect the linked call sites and candidates; do not assume compatible candidates execute.")))
-
-(defun design-review--uncertainty-context (finding document)
-  "Render deterministic FINDING context without an agent's interpretation."
-  (let* ((review (alist-get 'review finding))
-         (rule (alist-get 'requirement review))
-         (lines (list (if (equal (alist-get 'kind review) "analysis_blocked")
-                          "  Analysis blocked" "  Review needed"))))
-    (when rule
-      (push (format "  Requirement: %s %s -> %s"
-                    (alist-get 'kind rule) (or (alist-get 'from rule) (alist-get 'symbol rule))
-                    (or (alist-get 'to rule) (alist-get 'signature rule) "")) lines))
-    (dolist (entry (append (list (alist-get 'caller review) (alist-get 'target review))
-                           (append (alist-get 'candidates review) nil)))
-      (when (and (alist-get 'id entry) (not (string-empty-p (alist-get 'id entry))))
-        (let ((location (alist-get 'location entry)))
-          (push (format "  Symbol/candidate: %s %s"
-                        (design-review--text (alist-get 'id entry))
-                        (or (design-review--location-links document (alist-get 'file location) (alist-get 'line location))
-                            "(source unavailable)")) lines))))
-    (dolist (gap (append (alist-get 'gaps finding) nil))
-      (let ((location (alist-get 'location gap)))
-        (when (alist-get 'expression gap)
-          (push (format "  Call: %s" (design-review--text (alist-get 'expression gap))) lines))
-        (push (format "  Uncertainty: %s%s %s"
-                      (design-review--text (alist-get 'reason gap))
-                      (if (alist-get 'method gap)
-                          (format " (%s %s)" (alist-get 'method gap) (alist-get 'signature gap)) "")
-                      (or (design-review--location-links document (alist-get 'file location) (alist-get 'line location)) "")) lines)))
-    (dolist (guidance (append (alist-get 'guidance review) nil))
-      (push (format "  Inspect: %s" (design-review--text guidance)) lines))
-    (dolist (diagnostic (append (alist-get 'diagnostics review) nil))
-      (push (format "  Diagnostic: %s" (design-review--text diagnostic)) lines))
-    (nreverse lines)))
-
-(defun design-review--valid-citation-p (citation document)
-  "Check that CITATION names an existing local project source line."
-  (let ((file (and (listp citation) (alist-get 'file citation)))
-        (line (and (listp citation) (alist-get 'line citation))))
-    (and (stringp file) (not (file-remote-p file)) (not (file-name-absolute-p file))
-         (integerp line) (> line 0)
-         (let ((path (expand-file-name file (plist-get document :root))))
-           (and (file-regular-p path) (file-in-directory-p path (plist-get document :root))
-                (with-temp-buffer
-                  (insert-file-contents path)
-                  (<= line (line-number-at-pos (point-max)))))))))
-
-(defun design-review--format-assessments (run decoded)
-  "Pair agent judgements with unchanged deterministic findings from RUN."
-  (when (equal (plist-get run :language) "implementation-review")
-    (let* ((document (plist-get run :document))
-           (entries (alist-get 'uncertainty_assessments decoded))
-           (fresh (and (plist-get document :fingerprint)
-                       (condition-case nil
-                           (equal (plist-get document :fingerprint) (design-review--source-fingerprint document))
-                         (error nil))))
-           lines)
-      (when-let* ((link (design-review--evidence-link document)))
-        (push (format "Evidence freshness: %s %s" (if fresh "CURRENT" "STALE") link) lines))
-      (dolist (item (design-review--uncertainties document))
-        (let* ((key (alist-get 'key item)) (finding (alist-get 'finding item))
-               (matches (and (vectorp entries)
-                             (seq-filter (lambda (entry) (and (listp entry) (equal (alist-get 'key entry) key))) entries)))
-               (answer (and (= (length matches) 1) (elt matches 0)))
-               (assessment (alist-get 'assessment answer))
-               (citations (alist-get 'citations answer))
-               (valid (and answer (member assessment '("checked_no_concern" "concern" "inconclusive"))
-                           (or (null citations) (vectorp citations))
-                           (stringp (alist-get 'rationale answer))
-                           (not (string-empty-p (string-trim (alist-get 'rationale answer))))
-                           (or (equal assessment "inconclusive")
-                               (and (not (equal (alist-get 'kind (alist-get 'review finding)) "analysis_blocked"))
-                                    (vectorp citations) (> (length citations) 0)
-                                    (seq-every-p (lambda (citation) (design-review--valid-citation-p citation document)) citations))))))
-          (push (format "- Analysis: UNKNOWN [%s] (unchanged)" key) lines)
-          (dolist (line (design-review--uncertainty-context finding document)) (push line lines))
-          (push (format "  Agent assessment (advisory; applies only while evidence is CURRENT): %s"
-                        (cond ((not fresh) "STALE — rerun checks and review")
-                              ((not valid) "Inconclusive — missing or invalid assessment/evidence")
-                              ((equal assessment "checked_no_concern") "Checked — no concern found")
-                              ((equal assessment "concern") "Checked — concern found")
-                              (t "Inconclusive"))) lines)
-          (when valid
-            (push (format "  Rationale: %s" (design-review--text (alist-get 'rationale answer))) lines)
-            (dolist (citation (append citations nil))
-              (when (design-review--valid-citation-p citation document)
-                (push (concat "  Agent evidence: " (design-review--location-links document (alist-get 'file citation) (alist-get 'line citation))) lines))))))
-      (nreverse lines))))
+(defun design-review--format-assessments (run _decoded)
+  "Report freshness for every advisory assessment in RUN."
+  (let* ((document (plist-get run :document))
+         (fresh (condition-case nil (design-review--run-current-p run) (error nil))))
+    (when-let* ((link (design-review--evidence-link document)))
+      (list (format "Evidence freshness: %s %s" (if fresh "CURRENT" "STALE") link)))))
 
 (org-link-set-parameters "design-evidence" :follow #'design-review-follow-evidence)
 (add-hook 'after-save-hook #'design-review--invalidate-evidence-after-save)
 (add-hook 'find-file-hook #'design-review-refresh-evidence)
-
 (provide 'design-review-evidence)

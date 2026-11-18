@@ -48,20 +48,26 @@
   "y" "approve once" "Y" "approve all pending" "g" "latest inline reply"
   "S" "switch inline session" "c" "next inline here" "C" "next inline anywhere")
 
-(autoload 'design-review-refresh-annotations "emacs2-agent-setup" nil t)
-
 (defvar emacs2-design-review-map (make-sparse-keymap))
 (dolist (binding '(("n" . design-review-create) ("v" . design-review-validate-document)
                    ("c" . design-review-check-block) ("a" . design-review-check-document)))
   (autoload (cdr binding) "emacs2-agent-setup" nil t)
   (define-key emacs2-design-review-map (kbd (car binding)) (cdr binding)))
+(which-key-add-keymap-based-replacements emacs2-design-review-map
+  "n" "new review document" "v" "validate document"
+  "c" "review this block" "a" "review all blocks")
 (with-eval-after-load 'org
   (require 'design-review-fontification)
   (evil-define-key '(normal motion visual) org-mode-map
-    (kbd "SPC m D") emacs2-design-review-map)
+    (kbd "SPC m D") emacs2-design-review-map
+    (kbd "SPC m r") #'design-review-check-block
+    (kbd "SPC m R") #'design-review-check-document)
+  (which-key-add-major-mode-key-based-replacements 'org-mode
+    "SPC m" "Org" "SPC m D" "design review"
+    "SPC m r" "review this block" "SPC m R" "review all blocks")
   (define-key org-mode-map (kbd "C-c m D") emacs2-design-review-map))
 
-(dolist (language '(design-graph test-review change-review implementation-review diagram-review))
+(dolist (language '(plan-review design-graph test-review change-review implementation-review diagram-review))
   (autoload (intern (format "org-babel-execute:%s" language)) "emacs2-agent-setup")
   (with-eval-after-load 'org
     (unless (eq language 'design-graph)

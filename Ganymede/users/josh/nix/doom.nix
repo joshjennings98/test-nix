@@ -10,7 +10,6 @@
     let
       emacsPackage = pkgs.emacs-unstable;
       emacsPackages = pkgs.emacsPackagesFor emacsPackage;
-      goDesignCheck = pkgs.callPackage ../configs/doom/go-design-check { };
       aspell = pkgs.aspellWithDicts (dictionaries: [ dictionaries.en ]);
       englishWords = pkgs.runCommand "british-english-words" { } ''
         ${aspell}/bin/aspell -d en_GB dump master \
@@ -43,7 +42,6 @@
       home.packages = [
         pkgs.gopls
         pkgs.codex-acp
-        goDesignCheck
         pkgs.mermaid-cli
       ];
 
@@ -87,7 +85,6 @@
           pkgs.git
           pkgs.go
           pkgs.mermaid-cli
-          goDesignCheck
           pkgs.gopls
           pkgs.ripgrep
           pkgs.socat

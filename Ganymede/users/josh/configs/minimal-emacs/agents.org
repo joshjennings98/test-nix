@@ -28,7 +28,7 @@ Normal editor startup does not start an agent, connect MCP or send a request.
 | codex-acp, Go, curl, mermaid-cli, socat and desktop tools | Locked Nix packages |
 | rhblind/emacs-mcp-server | Explicit Nix build; absent from the locked Emacs package set |
 | Inline UI, permission UI, notifications, output limits and navigation | Vendored Lisp in configs/doom |
-| Design review and go-design-check | Local Lisp and Go sources in configs/doom |
+| Design review | Local Elisp sources in configs/doom |
 
 The MCP server exception is declared in =nix/overlays/emacs2-agent-packages.nix=:
 version 0.7.0, commit =a5d749cf9880598f66308545985526fd4460627f=, with a fixed
@@ -62,6 +62,8 @@ agent checks when upgrading because the extensions use Agent Shell APIs.
 | SPC m D v | Validate the review document |
 | SPC m D c | Check the current review block |
 | SPC m D a | Check the document and start reviews |
+| SPC m r | Run or rerun the review block at point |
+| SPC m R | Run or rerun all review blocks in the document |
 
 The design-review bindings are local to Org. =SPC m= opens local agent menus
 in agent buffers; =C-c m= provides the same menus in insert state. In an inline
@@ -71,7 +73,7 @@ Permission requests require an explicit review action and do not steal editing
 keys. The existing confirmed, session-scoped bypass command is retained.
 
 The detailed behaviour is documented in =configs/doom/docs/inline.md= and
-=configs/doom/docs/design-review.org=. The existing org-design-review agent
+=configs/doom/docs/design-review.org=. The existing imp-org agent
 skill is shared too. Authentication uses the normal Codex setup.
 
 * State and appearance

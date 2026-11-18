@@ -8,16 +8,8 @@
 (require 'seq)
 (require 'subr-x)
 
-(defgroup design-review nil "Org design review tools." :group 'org)
-(defcustom design-review-program "go-design-check"
-  "Executable providing typed Go graph validation and checks."
-  :type 'file :group 'design-review)
-(defcustom design-review-tool-arguments nil
-  "Extra Go build/scope arguments used consistently for validation and checks.
-For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
-  :type '(repeat string) :group 'design-review)
-
-(defconst design-review--languages '("design-graph" "test-review" "implementation-review" "diagram-review" "change-review"))
+(require 'design-review-fontification)
+(defconst design-review--languages '("plan-review" "test-review" "implementation-review" "diagram-review" "change-review"))
 
 (defun design-review--json (text)
   "Decode TEXT with consistent object and array representations."
@@ -43,86 +35,6 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
   (dolist (entry object)
     (unless (memq (car entry) allowed) (user-error "Unknown field %s" (car entry)))))
 
-(defun design-review--render-graph (graph)
-  "Render structured GRAPH into editable declaration lines and trees."
-  (design-review--keys graph '(roots declarations))
-  (let (lines imports)
-    (dolist (declaration (append (alist-get 'declarations graph) nil))
-      (design-review--keys declaration '(symbol kind change signature imports))
-      (dolist (entry (alist-get 'imports declaration))
-        (let ((previous (assoc (car entry) imports)))
-          (when (and previous (not (equal (cdr previous) (cdr entry))))
-            (user-error "Conflicting import alias %s" (car entry)))
-          (cl-pushnew entry imports :test #'equal)))
-      (push (format "%s %s %s%s"
-                    (design-review--line (alist-get 'change declaration) "Declaration change")
-                    (design-review--line (alist-get 'kind declaration) "Declaration kind")
-                    (design-review--line (alist-get 'symbol declaration) "Symbol")
-                    (if-let* ((signature (alist-get 'signature declaration)))
-                        (format " :: %s" (design-review--line signature "Signature")) "")) lines))
-    (setq lines (nreverse lines))
-    (dolist (entry (reverse (sort imports (lambda (a b) (string< (symbol-name (car a)) (symbol-name (car b)))))))
-      (push (format "import %s %s" (car entry) (json-encode (cdr entry))) lines))
-    (cl-labels ((node-lines
-                (node depth)
-                (design-review--keys node '(symbol relation change description children))
-                (let* ((change (alist-get 'change node))
-                       (marker (pcase change
-                                 ((or 'nil "") "") ("add" "+ ") ("remove" "- ")
-                                 ("preserve" "= ") (_ (user-error "Unknown tree change %s" change))))
-                       (relation (alist-get 'relation node))
-                       (description (alist-get 'description node)))
-                  (setq lines
-                        (append lines
-                                (list (format "%s%s%s%s%s" (make-string (* depth 2) ?\s) marker
-                                              (design-review--line (alist-get 'symbol node) "Symbol")
-                                              (if relation (format " [%s]" (design-review--line relation "Relationship")) "")
-                                              (if description (format " ; %s" (design-review--line description "Description")) "")))))
-                  (dolist (child (append (alist-get 'children node) nil)) (node-lines child (1+ depth))))))
-      (dolist (root (append (alist-get 'roots graph) nil)) (node-lines root 0)))
-    (concat (string-join lines "\n") "\n")))
-
-(defun design-review--parse-graph (id body)
-  "Parse a named graph BODY into the tool's structured request."
-  (let (declarations roots stack imports)
-    (dolist (line (split-string body "\n"))
-      (cond
-       ((string-match-p "\\`[ \t]*\\(?:;.*\\)?\\'" line))
-       ((string-match "\\`import \\([a-zA-Z_][a-zA-Z0-9_]*\\) \\(.*\\)\\'" line)
-        (let ((alias (intern (match-string 1 line)))
-              (path (design-review--json (match-string 2 line))))
-          (design-review--line path "Import path")
-          (when (assq alias imports) (user-error "Duplicate import alias %s" alias))
-          (push (cons alias path) imports)))
-       ((string-match "\\`\\(add\\|modify\\|remove\\|preserve\\) \\(function\\|method\\|type\\|interface\\|field\\|variable\\|constant\\) \\([^ \t].*?\\)\\(?: :: \\(.*\\)\\)?\\'" line)
-        (let ((declaration `((change . ,(match-string 1 line)) (kind . ,(match-string 2 line))
-                             (symbol . ,(match-string 3 line))))
-              (signature (match-string 4 line)))
-          (when signature (push (cons 'signature signature) declaration))
-          (push declaration declarations)))
-       ((string-match "\\`\\( *\\)\\([+=-] \\)?\\([^ \t].*?\\)\\(?: \\[\\([^]]+\\)\\]\\)?\\(?: ; \\(.*\\)\\)?\\'" line)
-        (let* ((indent (length (match-string 1 line)))
-               (depth (/ indent 2))
-               (marker (match-string 2 line))
-               (symbol (match-string 3 line))
-               (relation (match-string 4 line))
-               (description (match-string 5 line))
-               (node (list (cons 'symbol symbol) (cons 'children (vector)))))
-          (unless (and (= (% indent 2) 0) (<= depth (length stack)))
-            (user-error "Use two-space tree indentation: %s" line))
-          (when marker (push (cons 'change (pcase marker ("+ " "add") ("- " "remove") ("= " "preserve"))) node))
-          (when relation (push (cons 'relation relation) node))
-          (when description (push (cons 'description description) node))
-          (if (= depth 0)
-              (setq roots (append roots (list node)))
-            (let ((parent (nth (1- depth) stack)))
-              (setf (alist-get 'children parent) (vconcat (alist-get 'children parent) (list node)))))
-          (setq stack (append (seq-take stack depth) (list node)))))
-       (t (user-error "Invalid graph line: %s" line))))
-    (dolist (declaration declarations)
-      (when imports (nconc declaration (list (cons 'imports imports)))))
-    `((id . ,id) (declarations . ,(vconcat (nreverse declarations))) (roots . ,(vconcat roots)))))
-
 (defun design-review--test-names (body)
   "Validate test behaviours in BODY and return their names."
   (let (names current expectations)
@@ -147,11 +59,11 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
   (save-excursion
     (goto-char (point-min))
     (let ((case-fold-search t))
-      (while (re-search-forward "^[ \t]*#\\+begin_src[ \t]+\\(design-graph\\|test-review\\|implementation-review\\|diagram-review\\|change-review\\)\\(?:[ \t].*\\)?$" nil t)
+      (while (re-search-forward "^[ \t]*#\\+begin_src[ \t]+\\(plan-review\\|design-graph\\|test-review\\|implementation-review\\|diagram-review\\|change-review\\)\\(?:[ \t].*\\)?$" nil t)
         (let ((context (org-element-context)))
           (unless (memq (org-element-type context) '(src-block example-block export-block comment-block))
             (user-error "Incomplete review block at line %s" (line-number-at-pos)))))))
-  (let ((tree (org-element-parse-buffer)) metadata blocks names graphs test-names)
+  (let ((tree (org-element-parse-buffer)) metadata blocks names test-names)
     (org-element-map tree 'keyword
       (lambda (item)
         (let ((key (org-element-property :key item)))
@@ -169,6 +81,8 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
           (let ((name (org-element-property :name block))
                 (language (org-element-property :language block))
                 (body (org-element-property :value block)))
+            (when (equal language "design-graph")
+              (setq language "plan-review"))
             (when name
               (when (member name names) (user-error "Duplicate block ID %s" name))
               (push name names))
@@ -180,11 +94,8 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
                   (when (member test-name test-names) (user-error "Duplicate planned test %s" test-name))
                   (push test-name test-names)))
               (push (list :id name :language language :body body :begin (org-element-property :begin block)
-                          :end (org-element-property :end block)) blocks)
-              (when (equal language "design-graph")
-                (push (design-review--parse-graph name body) graphs))))))
-      (list :root (file-name-as-directory root) :baseline baseline :blocks (nreverse blocks)
-            :request `((graphs . ,(vconcat (nreverse graphs))))))))
+                          :end (org-element-property :end block)) blocks)))))
+      (list :root (file-name-as-directory root) :baseline baseline :blocks (nreverse blocks)))))
 
 (defun design-review--command (directory program args &optional input)
   "Run PROGRAM with ARGS in DIRECTORY, returning (exit . output)."
@@ -200,35 +111,9 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
     (unless (eq (car result) 0) (user-error "Git: %s" (string-trim (cdr result))))
     (string-trim-right (cdr result))))
 
-(defun design-review--tool (root command request)
-  "Invoke COMMAND with REQUEST and return decoded JSON, including findings."
-  (let* ((result (design-review--command root design-review-program
-                                        (append (list command "--root" root) design-review-tool-arguments) (json-encode request)))
-         (decoded (condition-case nil (design-review--json (cdr result))
-                    (error (user-error "Go design checker: %s" (cdr result))))))
-    (unless (memq (car result) '(0 3 4 5)) (user-error "Go design checker exited %s" (car result)))
-    (when (alist-get 'error decoded) (user-error "%s" (alist-get 'error decoded)))
-    decoded))
-
-(defun design-review--with-baseline (document function)
-  "Call FUNCTION with DOCUMENT's baseline directory; clean up owned worktrees."
-  (let ((root (plist-get document :root)) (baseline (plist-get document :baseline)))
-    (if (equal baseline "none") (funcall function root)
-      (let* ((prefix (design-review--git root "rev-parse" "--show-prefix"))
-             (temporary (make-temp-file "design-review-baseline-" t)) added)
-        (unwind-protect
-            (progn
-              (design-review--git root "worktree" "add" "--detach" temporary baseline)
-              (setq added t)
-              (funcall function (file-name-as-directory (expand-file-name prefix temporary))))
-          (when added
-            (design-review--git root "worktree" "remove" "--force" temporary))
-          (when (file-directory-p temporary) (delete-directory temporary t)))))))
-
-(defun design-review--validate (document)
-  "Validate DOCUMENT's complete proposal without executing Babel blocks."
-  (design-review--with-baseline
-   document (lambda (root) (design-review--tool root "validate" (plist-get document :request)))))
+(defun design-review--validate (_document)
+  "Confirm the document passed local structural parsing, without semantic claims."
+  '((status . "PASS") (findings . [])))
 
 (defun design-review--require-valid (document)
   "Return validated compiled requests or reject DOCUMENT."
@@ -262,14 +147,67 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
     (display-buffer buffer '((display-buffer-below-selected) (window-height . 0.3)))
     (message "Document validation: %s — see *Design review validation*" status)))
 
+(defun design-review--format-document ()
+  "Tidy prose and review block spacing, preserving other source bodies."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (atomic-change-group
+        (dolist (block (reverse (org-element-map (org-element-parse-buffer) 'src-block #'identity)))
+          (when (equal (org-element-property :language block) "test-review")
+            (goto-char (org-element-property :begin block))
+            (re-search-forward "^[ \t]*#\\+begin_src.*\n")
+            (let ((start (point))
+                  (end (copy-marker (progn (re-search-forward "^[ \t]*#\\+end_src") (line-beginning-position)))))
+              (goto-char start)
+              (while (re-search-forward "^\\(?:- \\)?[^ \t\n]+ :: [^\n]+\n\\(?:[ \t]*\n\\)*" end t)
+                (when (looking-at "[ \t]*- ")
+                  (let ((finish (point)))
+                    (skip-chars-backward " \t\n" start)
+                    (delete-region (point) finish)
+                    (insert "\n\n"))))
+              (set-marker end nil))))
+        (let (protected)
+          (org-element-map (org-element-parse-buffer)
+              '(src-block example-block export-block verse-block special-block fixed-width
+                drawer property-drawer table plain-list)
+            (lambda (element)
+              (goto-char (org-element-property :end element))
+              ;; Two blank lines can terminate a list; retain that boundary.
+              (unless (eq (org-element-type element) 'plain-list)
+                (forward-line (- (or (org-element-property :post-blank element) 0))))
+              (push (cons (org-element-property :begin element) (point)) protected)))
+          (goto-char (point-max))
+          (while (re-search-backward "\\(?:^[ \t]*\n\\)\\{2,\\}" nil t)
+            (let ((start (match-beginning 0)) (end (match-end 0)))
+              (unless (seq-some (lambda (span) (and (< start (cdr span)) (> end (car span)))) protected)
+                (replace-match "\n" t t)))))
+        (dolist (heading (reverse (org-element-map (org-element-parse-buffer) 'headline #'identity)))
+          (goto-char (org-element-property :begin heading))
+          (org-end-of-meta-data)
+          (unless (or (eobp) (looking-at "[ \t]*$")) (insert "\n"))
+          (goto-char (org-element-property :begin heading))
+          (unless (bobp)
+            (forward-line -1)
+            (unless (looking-at "[ \t]*$")
+              (forward-line 1)
+              (insert "\n"))))))))
+
+(defun design-review--formatted-document ()
+  "Parse before formatting, then return the document with updated positions."
+  (design-review--document)
+  (design-review--format-document)
+  (design-review--document))
+
 (defun design-review-validate-document ()
-  "Check document validity without running tests, Babel or agents."
+  "Tidy spacing and check validity without running tests, Babel or agents.
+Formatting is undoable and does not save the buffer."
   (interactive)
   (if (called-interactively-p 'interactive)
       (progn
         (require 'design-review-async)
         (design-review--prepare "validate"))
-    (design-review--validate (design-review--document))))
+    (design-review--validate (design-review--formatted-document))))
 
 (defun design-review--validation-error (err)
   "Represent ERR as a readable validation failure."
@@ -299,7 +237,10 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
     (when (cdr matches) (user-error "Block ID %s is ambiguous" id))
     (if existing
         (progn
-          (unless (equal language (org-element-property :language existing)) (user-error "Block %s has another kind" id))
+          (unless (or (equal language (org-element-property :language existing))
+                      (and (equal language "plan-review")
+                           (equal (org-element-property :language existing) "design-graph")))
+            (user-error "Block %s has another kind" id))
           (goto-char (org-element-property :begin existing))
           (org-babel-remove-result)
           ;; Reparse after removing results; :begin includes affiliated name lines.
@@ -330,11 +271,14 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
           (insert original)
           (org-mode)
           (funcall edit)
-          (design-review--require-valid (design-review--document))
+          (let ((document (design-review--document)))
+            (design-review--require-valid document))
+          (design-review--format-document)
           (setq candidate (buffer-string)))
         (atomic-change-group
           (replace-region-contents (point-min) (point-max) (lambda () candidate))
-          (save-buffer))))))
+          (save-buffer))
+        (font-lock-flush)))))
 
 (defun design-review-set-block (path id language body heading)
   "Upsert a validated block in PATH, preserving other document content."
@@ -453,7 +397,8 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
     (org-mode)
     (org-element-map (org-element-parse-buffer) 'src-block
 		     (lambda (block)
-		       (when (member (org-element-property :language block) design-review--languages)
+		       (when (member (org-element-property :language block)
+                                     (cons "design-graph" design-review--languages))
 			 (user-error "Use the dedicated tools for review blocks")))))
   (design-review--edit-document
    path
@@ -483,7 +428,7 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
 (defun design-review-create (path root title &optional baseline)
   "Create a review template at PATH for ROOT and TITLE."
   (interactive (list (read-file-name "Review document: " default-directory "design-review.org")
-                     (read-directory-name "Go project root: " default-directory)
+                     (read-directory-name "Project root: " default-directory)
                      (read-string "Review title: ")
                      (when current-prefix-arg "none")))
   (design-review--line title "Title")
@@ -494,7 +439,7 @@ For example, (\"--cgo\" \"off\") or (\"--tags\" \"integration\")."
   (when (or (file-exists-p path) (get-file-buffer path)) (user-error "Document already exists"))
   (setq baseline (or baseline (design-review--git root "rev-parse" "--verify" "HEAD^{commit}")))
   (with-temp-buffer
-    (insert (format "#+title: %s\n#+DESIGN_ROOT: %s\n#+DESIGN_BASELINE: %s\n\n* Context and decisions\n\n* Design and changes\n\n* Implementation alignment\n\n#+name: planned-implementation\n#+begin_src implementation-review :results drawer replace :exports both :eval never-export\nReview whether all planned implementation matches its intended behaviour and responsibilities.\n#+end_src\n\n* Tests and behaviours\n\n#+name: test-alignment\n#+begin_src test-review :results drawer replace :exports both :eval never-export\n; No planned tests listed yet. Discover new tests and assess alignment with the full plan.\n#+end_src\n\n* Changes outside plan\n\n#+name: changes-outside-plan\n#+begin_src change-review :results drawer replace :exports both :eval never-export\nReview all changes against the plan, including changes inside planned functions.\nIdentify unexpected responsibilities and explain any additional changes.\n#+end_src\n"
+    (insert (format "#+title: %s\n#+DESIGN_ROOT: %s\n#+DESIGN_BASELINE: %s\n\n* Context and decisions\n\n* Design and changes\n\n* Implementation alignment\n\n#+name: planned-implementation\n#+begin_src implementation-review :results drawer replace :exports both :eval never-export\nReview overall behaviour, integration, edge cases and document-wide decisions. Focused plan-review blocks own their specific planned changes; use them as context without duplicating their assessments.\n#+end_src\n\n* Tests and behaviours\n\n#+name: test-alignment\n#+begin_src test-review :results drawer replace :exports both :eval never-export\n; No planned tests listed yet. Discover new tests and assess alignment with the full plan.\n#+end_src\n\n* Changes outside plan\n\n#+name: changes-outside-plan\n#+begin_src change-review :results drawer replace :exports both :eval never-export\nReview all changes against the plan, including changes inside planned functions.\nIdentify unexpected responsibilities and explain any additional changes.\n#+end_src\n"
                     title (directory-file-name root) baseline))
     (org-mode)
     (design-review--require-valid (design-review--document))

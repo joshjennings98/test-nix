@@ -8,19 +8,16 @@
   "Most recent background job, including its status and validation result.")
 
 (defun design-review--worker ()
-  "Run validation and optional graph checks in a separate batch Emacs."
+  "Run document preparation in a separate batch Emacs."
   (let* ((input (pop command-line-args-left))
          (output (pop command-line-args-left))
          (job (design-review--json (with-temp-buffer (insert-file-contents input) (buffer-string))))
-         (design-review-program (alist-get 'program job))
-         (design-review-tool-arguments (append (alist-get 'arguments job) nil))
          (exec-path (append (alist-get 'exec_path job) nil))
          (document (list :root (alist-get 'root job) :baseline (alist-get 'baseline job)
-                         :path (alist-get 'path job) :authored-text (alist-get 'authored_text job)
-                         :request (alist-get 'request job)))
+                         :path (alist-get 'path job) :authored-text (alist-get 'authored_text job)))
          (result
           (condition-case err
-              (let ((validation (design-review--validate document)) checks changes fingerprint)
+              (let ((validation (design-review--validate document)) changes fingerprint)
                 (when (and (equal (alist-get 'command job) "check")
                            (equal (alist-get 'status validation) "PASS"))
                   (setq fingerprint (design-review--source-fingerprint document))
@@ -30,16 +27,8 @@
                                   "\n" (design-review--git (plist-get document :root) "diff" "--no-ext-diff" "--no-textconv"
                                                            (plist-get document :baseline) "--")))
                     (when (> (length changes) 60000)
-                      (setq changes (concat (substring changes 0 60000) "\n[TRUNCATED: inspect remaining changes]"))))
-                  (dolist (id (append (alist-get 'graphs job) nil))
-                    (let ((request (alist-get (intern id) (alist-get 'requests validation))))
-                      (push `((id . ,id)
-                              (result . ,(if (= (length (alist-get 'rules request)) 0)
-                                             '((status . "UNASSESSED")
-                                               (findings . [((message . "Context only; no implementation requirements."))]))
-                                           (design-review--tool (plist-get document :root) "check" request))))
-                            checks))))
-                `((validation . ,validation) (checks . ,(vconcat (nreverse checks)))
+                      (setq changes (concat (substring changes 0 60000) "\n[TRUNCATED: inspect remaining changes]")))))
+                `((validation . ,validation)
                   (fingerprint . ,fingerprint) (changes . ,changes)))
             (error `((validation . ,(design-review--validation-error err)))))))
     (with-temp-file output (insert (json-encode result)))))
@@ -56,26 +45,14 @@
     (setf (plist-get job :status) status
           (plist-get job :validation) validation
           (plist-get document :changes) (alist-get 'changes result)
-          (plist-get document :checks) (alist-get 'checks result)
           (plist-get document :fingerprint) (alist-get 'fingerprint result)
           (plist-get document :path) buffer-file-name
           (plist-get document :authored-text) (plist-get job :snapshot))
     (let ((implementations
            (mapcar (lambda (block) (cons (plist-get block :id) "PENDING"))
                    (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
-                               (plist-get job :blocks))))
-          blockers)
-      (dolist (graph (seq-filter (lambda (block) (equal (plist-get block :language) "design-graph"))
-                                (plist-get document :blocks)))
-        (let* ((id (plist-get graph :id))
-               (check (seq-find (lambda (check) (equal (alist-get 'id check) id)) (alist-get 'checks result)))
-               (verdict (alist-get 'status (alist-get 'result check))))
-          (unless (member verdict '("PASS" "UNASSESSED"))
-            (push (format "%s: %s" id (or verdict "not checked")) blockers))))
-      (setf (plist-get document :test-gate)
-            (list :implementations implementations
-                  :graph-blocker (when blockers
-                                   (concat "Graph checks did not pass (" (string-join (nreverse blockers) ", ") ").")))))
+                               (plist-get job :blocks)))))
+      (setf (plist-get document :test-gate) (list :implementations implementations)))
     (if (or (equal (plist-get job :command) "validate") (not (equal status "PASS")))
         (design-review--show-validation validation (plist-get job :source))
       (save-excursion
@@ -83,20 +60,10 @@
           (let* ((id (plist-get original :id))
                  (block (design-review--block id))
                  (text
-                  (cond ((equal (plist-get block :language) "design-graph")
-                      (design-review--format-findings
-                       (alist-get 'result (seq-find (lambda (check) (equal (alist-get 'id check) id))
-                                                   (append (alist-get 'checks result) nil))) document))
-                        ((and (equal (plist-get block :language) "test-review")
-                              (or (plist-get (plist-get document :test-gate) :graph-blocker)
-                                  (not (plist-get (plist-get document :test-gate) :implementations))))
-                         (format "%s\nBLOCKED: test review not run. %s" (design-review--stamp)
-                                 (or (plist-get (plist-get document :test-gate) :graph-blocker)
-                                     "No implementation-review block is available.")))
-                        (t (design-review--start-review block document validation)))))
+                  (design-review--start-review block document validation)))
             (goto-char (plist-get block :begin))
             (org-babel-insert-result text '("drawer" "replace")))))
-      (message "Graph checks finished; independent reviews queued for %s" (plist-get job :source)))))
+      (message "Document preparation finished; independent reviews queued for %s" (plist-get job :source)))))
 
 (defun design-review--preparation-finished (process job directory output log)
   "Collect PROCESS's result for JOB and release its temporary files."
@@ -122,11 +89,13 @@
 
 (defun design-review--prepare (command &optional id)
   "Start background COMMAND for the current document, optionally only block ID.
-Validate once.  Git and Go subprocesses run in the worker, never on the UI thread."
+Validate once.  Git subprocesses run in the worker, never on the UI thread."
   (when (equal (plist-get design-review--preparation :status) "RUNNING")
     (user-error "Document checks are already running in the background"))
   (condition-case err
-      (let* ((document (design-review--document))
+      (let* ((document (if (equal command "validate")
+                           (design-review--formatted-document)
+                         (design-review--document)))
              (blocks (if id (list (or (design-review--block id) (user-error "No review block %s" id)))
                        (plist-get document :blocks)))
              (implementations (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
@@ -150,13 +119,7 @@ Validate once.  Git and Go subprocesses run in the worker, never on the UI threa
                   (insert (json-encode
                            `((root . ,(plist-get document :root)) (baseline . ,(plist-get document :baseline))
                              (path . ,(plist-get job :source)) (authored_text . ,(plist-get job :snapshot))
-                             (request . ,(plist-get document :request)) (command . ,command)
-                             (program . ,(or (executable-find design-review-program) design-review-program))
-                             (arguments . ,(vconcat design-review-tool-arguments)) (exec_path . ,(vconcat exec-path))
-                             (graphs . ,(vconcat (mapcar (lambda (block) (plist-get block :id))
-                                                        (seq-filter (lambda (block) (equal (plist-get block :language) "design-graph"))
-                                                                    (if (seq-some (lambda (block) (equal (plist-get block :language) "implementation-review")) blocks)
-                                                                        (plist-get document :blocks) blocks)))))))))
+                             (command . ,command) (exec_path . ,(vconcat exec-path))))))
                 (setq design-review--preparation job)
                 (make-process
                  :name "design-review-checker" :buffer log :noquery t :connection-type 'pipe
@@ -171,7 +134,7 @@ Validate once.  Git and Go subprocesses run in the worker, never on the UI threa
              (signal (car err) (cdr err)))))
         (if (equal command "validate")
             (design-review--show-validation '((status . "RUNNING")) (plist-get job :source))
-          (message "Checking document and graphs in the background; reviews will queue when ready"))
+          (message "Preparing document in the background; reviews will queue when ready"))
         '((status . "RUNNING") (message . "Poll review-results for preparation status and block results.")))
     (error
      (let ((result (design-review--validation-error err)))

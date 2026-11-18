@@ -202,7 +202,7 @@ in
     enable = true;
     enableMcpIntegration = true;
     context = builtins.readFile "${ai}/AGENTS.md";
-    skills.org-design-review = "${ai}/skills/org-design-review/SKILL.md";
+    skills.imp-org = "${ai}/skills/imp-org/SKILL.md";
   };
 
   programs.mpv.enable = true;

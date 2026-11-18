@@ -37,7 +37,7 @@ for line in sys.stdin:
         prompt = "".join(item.get("text", "") for item in message["params"]["prompt"])
         if "REVIEW_JSON" in prompt:
             implementation = "(implementation-review)\n\nTask:" in prompt
-            chunk(json.dumps({"status": "PASS" if implementation else "REVIEW", "summary": "Fixture assessment", "findings": [
+            chunk(json.dumps({"status": "PASS" if implementation else "REVIEW", "summary": "Fixture assessment", "comparison": "Plan / observed\n  save -> persist: matches\nNo differences found.", "findings": [
                 {"status": "PASS" if implementation else "REVIEW", "message": "Inspect the assertion", "file": "app.go", "line": 2}
             ], "test_execution": "not run"}))
             reply(identifier, {"stopReason": "end_turn"})

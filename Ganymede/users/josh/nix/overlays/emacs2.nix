@@ -4,7 +4,6 @@ let
   emacsPackages = import ./emacs2-agent-packages.nix {
     emacsPackages = final.emacsPackagesFor prev.emacs-unstable;
   };
-  goDesignCheck = final.callPackage ../../configs/doom/go-design-check { };
   agentSource = final.lib.cleanSourceWith {
     src = ../../configs/doom;
     filter = path: type: final.lib.cleanSourceFilter path type && builtins.baseNameOf path != "bin";
@@ -104,7 +103,7 @@ let
     mkdir -p "$out/agent"
     for file in agent-shell-inline agent-shell-permission-transient \
       agent-shell-output-limit agent-shell-completion-notify agent-shell-navigation \
-      design-review design-review-execution design-review-evidence design-review-async design-review-mcp \
+      design-review design-review-fontification design-review-execution design-review-evidence design-review-async design-review-mcp \
       org-mermaid; do
       cp "${agentSource}/$file.el" "$out/agent/"
     done
@@ -120,7 +119,6 @@ in
       clojure
       codex-acp
       curl
-      goDesignCheck
       mermaid-cli
       socat
       i3
@@ -169,7 +167,6 @@ in
               final.python3
               final.socat
               final.curl
-              goDesignCheck
             ];
           }
           ''
@@ -177,7 +174,6 @@ in
             export XDG_STATE_HOME="$HOME/.local/state"
             export XDG_CACHE_HOME="$HOME/.cache"
             export AGENT_SHELL_TEST_PYTHON="${final.python3}/bin/python3"
-            export GO_DESIGN_CHECK="${goDesignCheck}/bin/go-design-check"
             mkdir -p "$HOME"
             check_agents() {
               ${emacs}/bin/emacs --batch \

@@ -7,26 +7,21 @@
 (require 'agent-shell-navigation)
 
 (defconst josh/review-test-directory (file-name-directory (or load-file-name buffer-file-name)))
-(setq design-review-program
-      (or (getenv "GO_DESIGN_CHECK")
-          (expand-file-name "../go-design-check/bin/go-design-check" josh/review-test-directory)))
-
 (defmacro josh/with-review (&rest body)
   "Run BODY in a disposable Git project and real Org review."
   (declare (indent 0) (debug t))
   `(let* ((root (file-name-as-directory (make-temp-file "org-review-test-" t)))
           (path (expand-file-name "review.org" root))
           (default-directory root)
-          (source (expand-file-name "app.go" root))
+          (source (expand-file-name "app.ts" root))
           (org-confirm-babel-evaluate nil)
           (org-element-use-cache nil)
           buffer)
      (unwind-protect
          (progn
-           (with-temp-file (expand-file-name "go.mod" root) (insert "module example.com/review\ngo 1.26\n"))
            (with-temp-file source (insert "package review\nfunc Start() { Save() }\nfunc Save() {}\n"))
            (design-review--git root "init" "--quiet")
-           (design-review--git root "add" "go.mod" "app.go")
+           (design-review--git root "add" "app.ts")
            (design-review--git root "-c" "user.name=Review Test" "-c" "user.email=review@example.invalid" "commit" "--quiet" "-m" "baseline")
            (design-review-create path root "Fixture review")
            (setq buffer (find-file-noselect path))
@@ -39,80 +34,6 @@
            (kill-buffer candidate)))
        (delete-directory root t))))
 
-(defun josh/review-proposal ()
-  '((declarations . [((symbol . "example.com/review.Validate") (kind . "function")
-                      (change . "add") (signature . "func()"))])
-    (roots . [((symbol . "example.com/review.Start")
-               (children . [((symbol . "example.com/review.Validate") (relation . "direct_call") (change . "add"))
-                            ((symbol . "example.com/review.Save") (relation . "direct_call"))]))])))
-
-(ert-deftest josh/review-roundtrip-readable-graphs ()
-  (let* ((graph (josh/review-proposal))
-         (parsed (design-review--parse-graph "calls" (design-review--render-graph graph))))
-    (should (equal (alist-get 'symbol (aref (alist-get 'declarations parsed) 0)) "example.com/review.Validate"))
-    (should (equal (alist-get 'change (aref (alist-get 'children (aref (alist-get 'roots parsed) 0)) 0)) "add"))
-    (should-not (alist-get 'change (aref (alist-get 'children (aref (alist-get 'roots parsed) 0)) 1)))
-    (should-error (design-review--parse-graph "x" "example.A\n   example.B [direct_call]\n"))))
-
-(ert-deftest josh/review-validated-upserts-and-babel ()
-  (josh/with-review
-    (goto-char (point-max))
-    (insert "\nMy unsaved review note.\n")
-    (design-review-mcp-set-graph `((path . ,path) (id . "calls") (graph . ,(josh/review-proposal))))
-    (should (string-match-p "My unsaved review note" (buffer-string)))
-    (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
-    (goto-char (plist-get (design-review--block "calls") :begin))
-    (let ((result (org-babel-execute-src-block)))
-      (should (string-match-p "FAIL" result))
-      (should (string-match-p (regexp-quote "#+RESULTS: calls") (buffer-string))))
-    (design-review-mcp-set-graph `((path . ,path) (id . "calls") (graph . ,(josh/review-proposal))))
-    (should (= (cl-count "calls" (plist-get (design-review--document) :blocks)
-                         :key (lambda (block) (plist-get block :id)) :test #'equal) 1))
-    (should-not (string-match-p (regexp-quote "#+RESULTS: calls") (buffer-string)))
-    (let ((before (buffer-string)) (disk (with-temp-buffer (insert-file-contents path) (buffer-string))))
-      (should-error (design-review-mcp-set-graph
-                     `((path . ,path) (id . "broken") (graph . ((roots . [((symbol . "does.not.Exist"))]))))))
-      (should (equal before (buffer-string)))
-      (should (equal disk (with-temp-buffer (insert-file-contents path) (buffer-string)))))
-    (with-temp-file source
-      (insert "package review\nfunc Start() { Validate(); Save() }\nfunc Save() {}\nfunc Validate() {}\n"))
-    ;; The proposal remains valid against its baseline after implementation.
-    (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
-    (goto-char (plist-get (design-review--block "calls") :begin))
-    (should (string-match-p "Status: PASS" (design-review-check-block)))
-    (should (string-match-p "design-diff:" (buffer-string)))
-    (should (string-match-p "PASS" (design-review-mcp-results `((path . ,path)))))
-    (should-not (string-match-p "design-review-baseline" (design-review--git root "worktree" "list")))))
-
-(ert-deftest josh/review-cross-block-and-manual-validation ()
-  (josh/with-review
-    (design-review-mcp-set-graph
-     `((path . ,path) (id . "declarations") (graph . ((declarations . ,(alist-get 'declarations (josh/review-proposal)))))))
-    (design-review-mcp-set-graph
-     `((path . ,path) (id . "calls") (graph . ((roots . ,(alist-get 'roots (josh/review-proposal)))))))
-    (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
-    (let ((before (buffer-string)))
-      (should-error (design-review-mcp-set-graph
-                     `((path . ,path) (id . "declarations") (graph . ((roots . [((symbol . "example.com/review.Start"))]))))))
-      (should (equal before (buffer-string))))
-    (goto-char (point-min))
-    (search-forward "add function example.com/review.Validate :: func()")
-    (replace-match "add function example.com/review.Validate :: func(MissingType)" t t)
-    (should (equal (alist-get 'status (design-review-validate-document)) "ERROR"))))
-
-(ert-deftest josh/review-repairs-manually-broken-graph ()
-  (josh/with-review
-    (design-review-mcp-set-graph `((path . ,path) (id . "calls") (graph . ,(josh/review-proposal))))
-    (goto-char (point-min))
-    (search-forward "  + example.com/review.Validate")
-    (replace-match "   + example.com/review.Validate" t t)
-    (should-error (design-review-validate-document))
-    (design-review-mcp-set-graph `((path . ,path) (id . "calls") (graph . ,(josh/review-proposal))))
-    (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
-    (goto-char (point-max))
-    (insert "\n#+name: unfinished\n#+begin_src design-graph\nexample.com/review.Start\n")
-    (should-error (design-review-validate-document))))
-
 (ert-deftest josh/review-rejects-malformed-tests-and-duplicate-ids ()
   (josh/with-review
     (should-error (design-review-mcp-set-tests
@@ -120,7 +41,7 @@
     (design-review-mcp-set-tests
      `((path . ,path) (id . "tests") (tests . [((name . "TestA") (description . "Reject invalid data")
                                               (expectations . ["Error returned" "No write occurs"]))])))
-    (should (string-match-p "\nTestA :: Reject invalid data\n- Error returned\n- No write occurs\n"
+    (should (string-match-p "\nTestA :: Reject invalid data\n\n- Error returned\n- No write occurs\n"
                             (buffer-string)))
     (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
     (should-error (design-review-mcp-set-tests
@@ -139,100 +60,13 @@
   (should-error (design-review--test-names "TestA :: Reject input\n") :type 'user-error)
   (should-error (design-review--test-names "- Error returned\n") :type 'user-error))
 
-(ert-deftest josh/review-validation-displays-readable-results-and-parse-errors ()
-  (save-window-excursion
-    (unwind-protect
-        (josh/with-review
-          (let ((original (buffer-string)))
-            (cl-letf (((symbol-function 'called-interactively-p) (lambda (_) t)))
-              (design-review-validate-document))
-            (should (equal (plist-get design-review--preparation :status) "RUNNING"))
-            (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING"))))
-            (should (equal original (buffer-string))))
-          (with-current-buffer "*Design review validation*"
-            (should (derived-mode-p 'special-mode))
-            (should (string-match-p "Document validation: PASS" (buffer-string)))
-            (should (string-match-p "does not run tests" (buffer-string))))
-          (goto-char (point-max))
-          (insert "\n#+name: malformed\n#+begin_src test-review\nMissing behaviour\n#+end_src\n")
-          (cl-letf (((symbol-function 'called-interactively-p) (lambda (_) t)))
-            (design-review-validate-document))
-          (with-current-buffer "*Design review validation*"
-            (should (string-match-p "Document validation: ERROR" (buffer-string)))
-            (should (string-match-p "TestName :: behaviour" (buffer-string)))
-            (should-not (string-match-p "Document validation: PASS" (buffer-string))))
-          ;; Synchronous authoring validation must still reject invalid input.
-          (should-error (design-review-validate-document) :type 'user-error))
-      (when (get-buffer "*Design review validation*")
-        (kill-buffer "*Design review validation*")))))
-
-(ert-deftest josh/review-background-check-validates-once-and-keeps-ui-responsive ()
-  (josh/with-review
-    (design-review-mcp-set-graph `((path . ,path) (id . "calls") (graph . ,(josh/review-proposal))))
-    (let* ((calls (expand-file-name "checker-calls" root))
-           (wrapper (expand-file-name "checker-wrapper" root))
-           (program design-review-program)
-           (heartbeats 0) queued timer)
-      (with-temp-file wrapper
-        (insert (format "#!%s\nprintf '%%s\\n' \"$1\" >> %s\nexec %s \"$@\"\n"
-                        (executable-find "sh") (shell-quote-argument calls) (shell-quote-argument program))))
-      (set-file-modes wrapper #o700)
-      (let ((design-review-program wrapper))
-        (cl-letf (((symbol-function 'design-review--command)
-                   (lambda (&rest _) (ert-fail "Synchronous subprocess on the UI thread")))
-                  ((symbol-function 'design-review--start-review)
-                   (lambda (block document validated)
-                     (should (equal (alist-get 'status validated) "PASS"))
-                     (should (stringp (design-review--brief block document)))
-                     (push (plist-get block :id) queued)
-                     "RUNNING: fixture review queued")))
-          (unwind-protect
-              (progn
-                (setq timer (run-at-time 0 0.01 (lambda () (cl-incf heartbeats))))
-                (should (equal (alist-get 'status (design-review--json (design-review-check-document))) "RUNNING"))
-                (should-not queued)
-                (let ((progress (design-review--json (design-review-mcp-results `((path . ,path))))))
-                  (should (equal (alist-get 'status (alist-get 'preparation progress)) "RUNNING"))
-                  (should (eq (alist-get 'running (aref (alist-get 'results progress) 0)) t)))
-                (should-error (design-review--prepare "check") :type 'user-error)
-                (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING"))))
-                (should (equal (plist-get design-review--preparation :status) "PASS"))
-                (should (> heartbeats 0))
-                (should (= (length queued) 2))
-                (should-not (member "test-alignment" queued))
-                (should (string-match-p "BLOCKED: test review not run" (buffer-string)))
-                (should (string-match-p "Status: FAIL" (buffer-string))))
-            (when timer (cancel-timer timer)))))
-      (should (equal (with-temp-buffer (insert-file-contents calls) (split-string (buffer-string) "\n" t))
-                     '("validate" "check")))
-      (should-not (string-match-p "design-review-baseline" (design-review--git root "worktree" "list"))))))
-
-(ert-deftest josh/review-background-validation-discards-edited-plans ()
-  (save-window-excursion
-    (josh/with-review
-      (should (equal (alist-get 'status (design-review--json (design-review-mcp-validate `((path . ,path))))) "RUNNING"))
-      (goto-char (point-max))
-      (insert "\nA new decision.\n")
-      (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING"))))
-      (should (equal (plist-get design-review--preparation :status) "STALE"))
-      (should-not (string-match-p "#+RESULTS:" (buffer-string))))))
-
-(ert-deftest josh/review-background-worker-errors-clean-up-baseline ()
-  (save-window-excursion
-    (josh/with-review
-      (let ((design-review-program "/does-not-exist/go-design-check"))
-        (design-review--prepare "validate")
-        (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING")))))
-      (should (equal (plist-get design-review--preparation :status) "ERROR"))
-      (should-not (string-match-p "design-review-baseline" (design-review--git root "worktree" "list"))))))
-
 (ert-deftest josh/review-registers-tools-with-schema ()
   (require 'mcp-server)
   (let (tools)
     (cl-letf (((symbol-function 'mcp-server-register-tool) (lambda (tool) (push tool tools))))
       (let ((names (design-review-register-tools)))
         (should (memq 'validate-document names))
-        (should (memq 'review-set-graph names))
+        (should (memq 'review-set-plan names))
         (should (= (length tools) 8))))))
 
 (ert-deftest josh/review-mcp-wire-schema-and-call ()
@@ -241,14 +75,14 @@
     (design-review-register-tools)
     (let* ((encoded (mcp-server-transport--format-json-rpc `((tools . ,(mcp-server-tools-list)))))
            (decoded (design-review--json encoded))
-           (graph-tool (seq-find (lambda (tool) (equal (alist-get 'name tool) "review-set-graph"))
+           (graph-tool (seq-find (lambda (tool) (equal (alist-get 'name tool) "review-set-plan"))
                                  (alist-get 'tools decoded))))
       (should (eq (alist-get 'additionalProperties (alist-get 'inputSchema graph-tool)) :json-false)))
     (josh/with-review
       (let* ((args (alist-get 'arguments
                               (mcp-server-transport--parse-json-rpc
-                               (json-encode `((arguments . ((path . ,path) (id . "calls") (graph . ,(josh/review-proposal)))))))))
-             (response (mcp-server-tools-call "review-set-graph" args)))
+                               (json-encode `((arguments . ((path . ,path) (id . "calls") (body . "+ frontend: save preferences"))))))))
+             (response (mcp-server-tools-call "review-set-plan" args)))
         (should (equal (alist-get 'status (design-review--json (alist-get 'text (aref response 0)))) "updated"))))))
 
 (ert-deftest josh/review-late-answer-preserves-edited-block ()
@@ -282,7 +116,7 @@
     (save-window-excursion
       (design-review-follow-diff
        (base64-encode-string (json-encode `((root . ,root) (baseline . ,(plist-get (design-review--document) :baseline))
-                                           (file . "app.go") (line . 2))) t) nil)
+                                           (file . "app.ts") (line . 2))) t) nil)
       (should (derived-mode-p 'magit-diff-mode))
       (should (string-match-p "@@" (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))))
 
@@ -308,7 +142,7 @@
       (save-window-excursion
         (design-review-follow-diff
          (base64-encode-string (json-encode `((root . ,root) (baseline . ,baseline)
-                                             (file . "app.go") (line . 2))) t) nil)
+                                             (file . "app.ts") (line . 2))) t) nil)
         (should (equal buffer-file-name source))
         (should (= (line-number-at-pos) 2))))))
 
@@ -363,6 +197,8 @@
             (design-review-mcp-set-tests
              `((path . ,path) (id . "tests") (tests . [((name . "TestExample") (description . "REVIEW_JSON")
                                                       (expectations . ["Supports the stated behaviour"]))])))
+            (design-review-mcp-set-plan `((path . ,path) (id . "frontend") (body . "+ Button -> save client")))
+            (design-review-mcp-set-plan `((path . ,path) (id . "backend") (body . "+ config/theme.yaml: default system")))
             (should (string-match-p "RUNNING" (design-review-mcp-check `((path . ,path)))))
             (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING"))))
             (should (equal (plist-get design-review--preparation :status) "PASS"))
@@ -370,9 +206,9 @@
               (josh/review-wait
                (lambda () (seq-every-p
                            (lambda (id) (not (gethash (cons document-buffer id) design-review--runs)))
-                           '("tests" "test-alignment" "planned-implementation" "diagram-alignment" "changes-outside-plan")))))
+                           '("frontend" "backend" "tests" "test-alignment" "planned-implementation" "diagram-alignment" "changes-outside-plan")))))
             (should (= (length (delete-dups shells)) 1))
-            (dolist (id '("tests" "planned-implementation" "diagram-alignment" "changes-outside-plan"))
+            (dolist (id '("frontend" "backend" "tests" "planned-implementation" "diagram-alignment" "changes-outside-plan"))
               (goto-char (plist-get (design-review--block id) :begin))
               (let ((result (org-babel-where-is-src-block-result)))
                 (should result)
@@ -392,7 +228,7 @@
   (dolist (case '(("PASS" "PASS" t) ("FAIL" "FAIL" nil) ("UNKNOWN" "UNKNOWN" nil)
                   ("REVIEW" "REVIEW" nil) (nil "PASS" nil) ("PASS" "REVIEW" nil)
                   ("malformed" "PASS" nil) ("cancelled" "PASS" nil) ("stale" "PASS" nil)
-                  ("graph-unknown" "PASS" nil) ("graph-fail" "PASS" nil) ("plan-edited" "PASS" nil)))
+                  ("plan-edited" "PASS" nil)))
     (josh/with-review
       (let* ((gate (list :implementations (list (cons "planned-implementation" "PENDING"))))
              (document (append (list :test-gate gate :path path :fingerprint nil
@@ -417,7 +253,7 @@
               (should (gethash (plist-get test :key) design-review--runs))
               (setf (plist-get implementation :text)
                     (if (equal (car case) "malformed") "not JSON"
-                      (json-encode `((status . ,(if (member (car case) '("stale" "graph-unknown" "graph-fail" "plan-edited")) "PASS" (car case)))
+                      (json-encode `((status . ,(if (member (car case) '("stale" "plan-edited")) "PASS" (car case)))
                                      (summary . "Fixture") (test_execution . "not run")
                                      (findings . [((status . ,(cadr case)) (message . "Evidence"))])))))
               (let ((text (if (equal (car case) "cancelled") "UNKNOWN: cancelled"
@@ -428,8 +264,6 @@
                   (goto-char (point-max))
                   (insert "\nChanged feature requirement.\n"))
                 (design-review--finish (plist-get implementation :key) implementation text))
-              (when (member (car case) '("graph-unknown" "graph-fail"))
-                (setf (plist-get (plist-get document :test-gate) :graph-blocker) "Graph checks did not pass."))
               (design-review--submit (plist-get test :key) test)
               (should (eq (not (null sent)) (nth 2 case)))
               (unless sent (should (string-match-p "BLOCKED: test review not run" (buffer-string)))))
@@ -486,72 +320,6 @@
         (should-error (design-review-set-context path "* A top-level heading") :type 'user-error)
         (should (equal before (buffer-string)))))))
 
-(ert-deftest josh/review-uncertainty-context-and-agent-assessment ()
-  (josh/with-review
-    (let* ((finding '((id . "rule") (status . "UNKNOWN") (message . "Unresolved dispatch")
-                     (review . ((kind . "review_needed")
-                                (requirement . ((kind . "forbid_call") (from . "example.Run") (to . "example.Save")))
-                                (guidance . ["Inspect receiver assignments."])))
-                     (gaps . [((reason . "interface dispatch") (expression . "err.Error()")
-                               (location . ((file . "app.go") (line . 2))))])))
-           (document (append (list :path path :authored-text (design-review--authored-text)
-                                   :checks (vector `((id . "calls") (result . ((findings . ,(vector finding)))))))
-                             (design-review--document)))
-           (answer '((key . "calls/rule") (assessment . "checked_no_concern")
-                     (rationale . "Inspected assignments; target cannot reach this call.")
-                     (citations . [((file . "app.go") (line . 2))])))
-           (run (list :shell (current-buffer) :language "implementation-review" :document document))
-           (reply `((uncertainty_assessments . ,(vector answer)))))
-      (setf (plist-get document :fingerprint) (design-review--source-fingerprint document))
-      (setf (plist-get run :document) document)
-      (let ((brief (design-review--brief (design-review--block "planned-implementation") document))
-            (text (string-join (design-review--format-assessments run reply) "\n")))
-        (should (string-match-p "calls/rule" brief))
-        (should (string-match-p "uncertainty_assessments" brief))
-        (should (string-match-p "Analysis: UNKNOWN" text))
-        (should (string-match-p "Checked — no concern found" text))
-        (should (string-match-p "err.Error()" text))
-        (should (string-match-p "design-source:" text))
-        (should (string-match-p "Evidence freshness: CURRENT" text)))
-      (dolist (citations '([] [((file . "../outside.go") (line . 1))] [((file . "app.go") (line . 900))] [42]))
-        (setf (alist-get 'citations answer) citations)
-        (should (string-match-p "missing or invalid" (string-join (design-review--format-assessments run reply) "\n"))))
-      (setf (alist-get 'citations answer) [((file . "app.go") (line . 2))])
-      (should (string-match-p "missing or invalid" (string-join (design-review--format-assessments run nil) "\n")))
-      (should (string-match-p "missing or invalid"
-                              (string-join (design-review--format-assessments run `((uncertainty_assessments . ,(vector answer answer)))) "\n")))
-      (setf (alist-get 'kind (alist-get 'review finding)) "analysis_blocked")
-      (should (string-match-p "missing or invalid" (string-join (design-review--format-assessments run reply) "\n")))
-      (setf (alist-get 'kind (alist-get 'review finding)) "review_needed")
-      (with-temp-file source (insert "package review\nfunc Start() {}\nfunc Save() {}\n"))
-      (let ((text (string-join (design-review--format-assessments run reply) "\n")))
-        (should (string-match-p "Evidence freshness: STALE" text))
-        (should-not (string-match-p "Checked — no concern found" text))))))
-
-(ert-deftest josh/review-implementation-block-includes-fresh-graph-evidence ()
-  (josh/with-review
-    (design-review-mcp-set-graph
-     `((path . ,path) (id . "calls")
-       (graph . ((roots . [((symbol . "example.com/review.Start")
-                            (children . [((symbol . "example.com/review.Save") (relation . "reaches") (change . "remove"))]))])))))
-    (with-temp-file source
-      (insert "package review\nfunc Start() { var err error; _ = err.Error() }\nfunc Save() {}\n"))
-    (let (captured)
-      (cl-letf (((symbol-function 'design-review--start-review)
-                 (lambda (_block document _validated)
-                   (setq captured document)
-                   "RUNNING: fixture")))
-        (design-review--prepare "check" "planned-implementation")
-        (josh/review-wait (lambda () (not (equal (plist-get design-review--preparation :status) "RUNNING")))))
-      (should captured)
-      (should (equal (plist-get captured :fingerprint) (design-review--source-fingerprint captured)))
-      (let* ((items (design-review--uncertainties captured))
-             (finding (alist-get 'finding (car items))))
-        (should (= (length items) 1))
-        (should (equal (alist-get 'kind (alist-get 'review finding)) "review_needed"))
-        (should (seq-some (lambda (gap) (equal (alist-get 'expression gap) "err.Error()")) (alist-get 'gaps finding)))
-        (should (string-match-p "err.Error" (design-review--brief (design-review--block "planned-implementation") captured)))))))
-
 (ert-deftest josh/review-persisted-evidence-freshness ()
   (josh/with-review
     (let* ((document (append (list :path path :authored-text (design-review--authored-text)) (design-review--document))))
@@ -572,7 +340,7 @@
                             (plist-get document :blocks))
                      '("implementation-review" "test-review" "change-review")))
       (dolist (entry '(("test-alignment" . "discover added or changed tests")
-                       ("planned-implementation" . "all planned work")
+                       ("planned-implementation" . "overall implementation behaviour")
                        ("changes-outside-plan" . "undermines or otherwise affects")))
         (should (string-match-p (cdr entry)
                                 (design-review--brief (design-review--block (car entry)) document)))))))
@@ -658,3 +426,145 @@
               (with-current-buffer shell (should (equal design-review--queue (list next)))))
           (remhash key design-review--runs)
           (kill-buffer shell))))))
+
+(ert-deftest josh/review-highlighting-unplanned-findings-survive-reopening ()
+  (with-temp-buffer
+    (let* ((reply '((summary . "Changes reviewed") (test_execution . "not run")
+                    (findings . [((status . "PASS") (outside_plan . t) (message . "Extra helper"))
+                                 ((status . "REVIEW") (outside_plan . :json-false) (message . "Planned concern"))
+                                 ((status . "UNKNOWN") (message . "Insufficient evidence"))
+                                 ((status . "FAIL") (outside_plan . "true") (message . "Invalid classification"))])))
+           (run (list :shell (current-buffer) :language "change-review"
+                      :document '(:root "/tmp" :baseline "none")
+                      :text (json-encode reply)))
+           (rendered (substring-no-properties (design-review--review-result run))))
+      (should (string-match-p (regexp-quote "PASS [outside plan]: Extra helper") rendered))
+      (should (= 2 (length (split-string rendered (regexp-quote "[outside plan]")))))
+      (let ((other (copy-sequence run)))
+        (setf (plist-get other :language) "test-review")
+        (should-not (string-match-p (regexp-quote "[outside plan]")
+                                    (design-review--review-result other))))
+      (insert "#+begin_src change-review\nReview changes.\n#+end_src\n#+RESULTS:\n:RESULTS:\n"
+              rendered "\n:END:\n\n- REVIEW [outside plan]: Ordinary prose\n")
+      (org-mode)
+      (font-lock-ensure)
+      (goto-char (point-min))
+      (search-forward "Extra helper")
+      (should (memq 'design-review-unplanned-face
+                    (ensure-list (get-text-property (1- (point)) 'face))))
+      (dolist (text '("Planned concern" "Insufficient evidence" "Invalid classification" "Ordinary prose"))
+	(goto-char (point-min))
+	(search-forward text)
+	(should-not (memq 'design-review-unplanned-face
+                          (ensure-list (get-text-property (1- (point)) 'face))))))))
+
+
+(ert-deftest josh/review-freeform-boxes-preserve-representation-and-results ()
+  (josh/with-review
+    (let ((frontend "Panel\n  + onSave -> client\n\n  preserve: failed saves keep draft")
+          (backend "config/defaults.yaml\n  theme: system\n~ handler persists selected theme"))
+      (design-review-mcp-set-plan `((path . ,path) (id . "frontend") (body . ,frontend)))
+      (design-review-mcp-set-plan `((path . ,path) (id . "backend") (body . ,backend)))
+      (should (equal (plist-get (design-review--block "frontend") :body) (concat frontend "\n")))
+      (dolist (id '("frontend" "backend"))
+        (goto-char (plist-get (design-review--block id) :begin))
+        (org-babel-insert-result (concat "Result for " id) '("drawer" "replace")))
+      (design-review-mcp-set-plan `((path . ,path) (id . "frontend") (body . ,(concat frontend "\n+ retry"))))
+      (should-not (string-match-p "Result for frontend" (buffer-string)))
+      (should (string-match-p "Result for backend" (buffer-string)))
+      (let ((before (buffer-string)))
+        (dolist (body '("" "#+end_src\n#+name: injected\n#+begin_src plan-review"))
+          (should-error (design-review-mcp-set-plan `((path . ,path) (id . "backend") (body . ,body)))))
+        (should (equal before (buffer-string))))
+      (let ((brief (design-review--brief (design-review--block "frontend") (design-review--document))))
+        (should (string-match-p "Panel" brief))
+        (should (string-match-p "config/defaults.yaml" brief))
+        (should (string-match-p "ONLY the planned changes in this assigned box" brief))
+        (should (string-match-p "FULL authored document" brief))
+        (should (string-match-p "There is no prescribed syntax or language" brief))))))
+
+(ert-deftest josh/review-legacy-boxes-convert-independently ()
+  (josh/with-review
+    (goto-char (point-max))
+    (insert "\n#+name: old-front\n#+begin_src design-graph\nold.front -> save\n#+end_src\n\n#+name: old-back\n#+begin_src design-graph\nold.back -> persist\n#+end_src\n")
+    (save-buffer)
+    (should (equal (plist-get (design-review--block "old-back") :language) "plan-review"))
+    (design-review-mcp-set-plan `((path . ,path) (id . "old-front") (body . "old.front -> save")))
+    (should (equal (plist-get (design-review--block "old-back") :body) "old.back -> persist\n"))
+    (design-review-mcp-set-plan `((path . ,path) (id . "old-back") (body . "old.back -> persist")))
+    (should-not (string-match-p "begin_src design-graph" (buffer-string)))))
+
+(ert-deftest josh/review-local-validation-without-go-or-git ()
+  (let ((root (make-temp-file "review-config-only-" t)))
+    (unwind-protect
+        (let ((path (expand-file-name "review.org" root)) (exec-path nil))
+          (design-review-create path root "Config only" "none")
+          (unwind-protect
+              (with-current-buffer (find-file-noselect path)
+                (design-review-mcp-set-plan `((path . ,path) (id . "config") (body . "+ theme: system")))
+                (should (equal (alist-get 'status (design-review-validate-document)) "PASS"))
+                (goto-char (point-max))
+                (insert "\n#+name: config\n#+begin_src plan-review\nduplicate\n#+end_src\n")
+                (should-error (design-review--document) :type 'user-error))
+            (when-let* ((buffer (get-file-buffer path)))
+              (with-current-buffer buffer (set-buffer-modified-p nil))
+              (kill-buffer buffer))))
+      (delete-directory root t))))
+
+(ert-deftest josh/review-plan-babel-never-executes-body ()
+  (josh/with-review
+    (design-review-mcp-set-plan `((path . ,path) (id . "freeform") (body . "(error \"must not execute\")")))
+    (goto-char (plist-get (design-review--block "freeform") :begin))
+    (let (assigned)
+      (cl-letf (((symbol-function 'design-review--start-review)
+                 (lambda (block _document &optional _validated)
+                   (setq assigned (plist-get block :id)) "RUNNING")))
+        (org-babel-execute-src-block))
+      (should (equal assigned "freeform")))))
+
+(ert-deftest josh/review-plan-empty-assessment-is-unknown ()
+  (josh/with-review
+    (let ((run (list :shell (current-buffer) :language "plan-review" :outcome "UNKNOWN"
+                     :document (design-review--document)
+                     :text "{\"status\":\"PASS\",\"summary\":\"Fine\",\"findings\":[],\"test_execution\":\"not run\"}")))
+      (should (string-match-p "Review verdict: UNKNOWN" (design-review--review-result run))))))
+
+(ert-deftest josh/review-background-preparation-discards-edited-plan ()
+  (josh/with-review
+    (let ((snapshot (design-review--authored-text)) queued)
+      (design-review-set-context path "A changed decision")
+      (cl-letf (((symbol-function 'design-review--start-review) (lambda (&rest _) (setq queued t))))
+        (let ((job (list :status "RUNNING" :document (design-review--document) :snapshot snapshot :command "check" :source path)))
+          (design-review--prepared job '((validation . ((status . "PASS")))))
+          (should (equal (plist-get job :status) "STALE"))))
+      (should-not queued))))
+
+(ert-deftest josh/review-plan-comparison-preserves-layout-and-stays-in-result ()
+  (josh/with-review
+    (let* ((comparison "save\n  - validate -> persist (planned)\n  + persist (observed, app.ts:2)\n:END:\n#+begin_src shell\nunsafe")
+           (run (list :shell (current-buffer) :language "plan-review" :outcome "UNKNOWN"
+                      :document (design-review--document)
+                      :text (json-encode `((status . "REVIEW") (summary . "Validation missing")
+                                           (comparison . ,comparison) (test_execution . "not run")
+                                           (findings . [((status . "REVIEW") (message . "Missing validation")
+                                                         (file . "app.ts") (line . 2))])))))
+           (result (design-review--review-result run)))
+      (should (string-match-p (regexp-quote ": save\n:   - validate -> persist (planned)\n:   + persist") result))
+      (should (string-match-p "Review verdict: REVIEW" result))
+      (should (string-match-p "design-source:" result))
+      (goto-char (plist-get (design-review--block "planned-implementation") :begin))
+      (org-babel-insert-result result '("drawer" "replace"))
+      (should (= 3 (length (plist-get (design-review--document) :blocks))))
+      (should-not (string-match-p "Plan versus implementation" (design-review--authored-text))))))
+
+(ert-deftest josh/review-plan-comparison-required-for-agreement ()
+  (josh/with-review
+    (dolist (comparison '(nil "" "  \n" "save\n  -> persist (matches plan)\nNo differences found."))
+      (let ((run (list :shell (current-buffer) :language "plan-review" :outcome "UNKNOWN"
+                       :document (design-review--document)
+                       :text (json-encode `((status . "PASS") (summary . "Aligned")
+                                            (comparison . ,comparison) (test_execution . "not run")
+                                            (findings . [((status . "PASS") (message . "Checked app.ts:2"))]))))))
+        (design-review--review-result run)
+        (should (equal (plist-get run :outcome)
+                       (if (and comparison (not (string-blank-p comparison))) "PASS" "UNKNOWN")))))))

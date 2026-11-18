@@ -36,14 +36,16 @@
 (defun design-review--review-task (language)
   "Return the assessment obligations for LANGUAGE."
   (pcase language
+    ("plan-review"
+     "Assess ONLY the planned changes in this assigned box against actual source and configuration, using the FULL authored document as context. There is no prescribed syntax or language: interpret the author's component tree, call-tree diff, interfaces, pseudocode, file tree, configuration, diagram or prose on its own terms. Identify each proposed addition, modification, removal and preserved behaviour; give an explicit assessment and source evidence for each, including cross-language boundaries relevant to this box. Distinguish existing behaviour and alternatives from agreed intent. Do not require literal call edges or identical notation when the implementation fulfils the intent. Report discrepancies, omissions and insufficient evidence; never silently skip an item or revise the plan to fit the code. General implementation concerns, other plan boxes, test quality and out-of-plan changes belong to their respective reviewers. Return a top-level status PASS, FAIL, REVIEW or UNKNOWN. PASS requires evidence for all planned changes; missing or uncertain coverage is UNKNOWN. Also return a required top-level comparison string containing a multiline Show Me view of the differences between the agreed plan and observed implementation. Choose a representation suited to this box: an annotated call/component tree, pseudocode or signature diff, file/configuration comparison, or labelled planned/observed views. Keep enough matching context to locate each difference. Clearly distinguish planned-but-missing work, actual additions or deviations, equivalent implementations and unknowns; explain your notation. This compares the PLAN with CURRENT IMPLEMENTATION, not baseline code with current code. Show relevant source locations and connect differences to the findings. If it matches, show the checked flow or structure and explicitly say no differences were found; do not invent a diff. Preserve indentation and line breaks in the JSON string. Use plain text, not Org source delimiters or Markdown fences. A verdict or prose summary alone is insufficient.")
     ("test-review"
      "Assess the tests named in this block, using the full document as context. Explain whether their assertions establish the stated behaviours and identify missing coverage for those behaviours. Do not repeat assessments owned by other test blocks. If this block has no named tests, discover added or changed tests, including untracked tests, and assess their alignment. Distinguish test execution from alignment.")
     ("implementation-review"
-     "Review the implementation of all planned work against the full document: behaviour, responsibilities, edge cases and requirements. Explain what matches, what is missing and what contradicts the plan. Deterministic graph checks and passing tests alone do not establish implementation alignment. Add a top-level status field to your final JSON: PASS, FAIL, REVIEW or UNKNOWN. PASS means you found no implementation concern and no unresolved question; every finding must then also be PASS. Test reviews will run only after graph checks and this implementation assessment pass. Do not assess test quality in this stage.")
+     "Assess overall implementation behaviour, integration between planned parts, edge cases and document-wide decisions using the full plan. Focused plan-review boxes own their individual planned changes; use them as context without repeating their assessments. Do not assess test quality or take over out-of-plan review. Return a top-level status PASS, FAIL, REVIEW or UNKNOWN. PASS means no concern or unresolved question; every finding must then be PASS. Test reviews wait for this overall implementation assessment to pass.")
     ("diagram-review"
      "Review conformance to each authored diagram, using the full plan as context. Own the diagram assessments: check interactions, order, states, branches, error paths and side effects where depicted. Give evidence for matches, mismatches and uncertainty. Do not take over test alignment, general implementation review or out-of-plan change review.")
     ("change-review"
-     "Surface all changes outside the plan, including extra responsibilities inside planned functions, new helpers, tests and non-Go files. Explain whether each additional change undermines or otherwise affects planned behaviour. Additional work is not automatically a defect. Inspect the full repository diff and untracked files.")))
+     "Surface all changes outside the plan, including extra responsibilities inside planned functions, new helpers, tests and configuration files. Explain whether each additional change undermines or otherwise affects planned behaviour. Additional work is not automatically a defect. Inspect the full repository diff and untracked files.")))
 
 (defvar design-review--runs (make-hash-table :test #'equal)
   "Active reviews keyed by document buffer and block ID.")
@@ -57,7 +59,7 @@
   "Return the named review source block at point."
   (let* ((info (org-babel-get-src-block-info 'light))
          (id (nth 4 info)))
-    (unless (and info (member (car info) design-review--languages))
+    (unless (and info (member (car info) (cons "design-graph" design-review--languages)))
       (user-error "Point is not in a review block"))
     (or (design-review--block id) (user-error "Review block must have a unique name"))))
 
@@ -85,31 +87,6 @@
   "Keep returned prose on one Org result line."
   (replace-regexp-in-string "[\n\r]+" " " (format "%s" (or value ""))))
 
-(defun design-review--format-findings (result document)
-  "Render RESULT with readable findings and evidence navigation."
-  (let ((lines (list (design-review--stamp) (format "Status: %s" (or (alist-get 'status result) "UNKNOWN")))))
-    (dolist (finding (append (alist-get 'findings result) nil))
-      (setq lines
-            (append lines (list (format "- %s %s: %s" (or (alist-get 'status finding) "REVIEW")
-                                        (or (alist-get 'id finding) "") (design-review--text (alist-get 'message finding))))))
-      (when (equal (alist-get 'status finding) "UNKNOWN")
-        (setq lines (append lines (design-review--uncertainty-context finding document))))
-      (dolist (location (append (alist-get 'locations finding) nil))
-        (when-let* ((link (design-review--location-links document (alist-get 'file location) (alist-get 'line location))))
-          (setq lines (append lines (list (format "  %s" link)))))))
-    (dolist (problem (append (alist-get 'analysis_errors result) nil))
-      (setq lines (append lines (list (format "- UNKNOWN: %s" (design-review--text problem))))))
-    (string-join lines "\n")))
-
-(defun design-review--check-graph (block document)
-  "Validate DOCUMENT, then check BLOCK's requirements against current code."
-  (let* ((validated (design-review--require-valid document))
-         (request (alist-get (intern (plist-get block :id)) (alist-get 'requests validated))))
-    (if (= (length (alist-get 'rules request)) 0)
-        (format "%s\nUNASSESSED: context only; no implementation requirements." (design-review--stamp))
-      (design-review--format-findings
-       (design-review--tool (plist-get document :root) "check" request) document))))
-
 (defun design-review--diagram-task (block)
   "Require explicit per-diagram findings for a diagram review BLOCK."
   (when (equal (plist-get block :language) "diagram-review")
@@ -126,11 +103,13 @@
                     (concat (design-review--git root "status" "--short" "--untracked-files=all") "\n"
                             (design-review--git root "diff" "--no-ext-diff" "--no-textconv" baseline "--")))))
          (limit 60000))
-    (format "Independent design review. This conversation is dedicated to review, separate from the implementation conversation. Assess this task against the current supplied evidence; earlier turns are not proof that current code is correct. Do not edit project files or the Org document, and do not revise the plan to fit the code. Inspect the actual source and tests relevant to your assigned remit. The full document is shared context, not a request to perform every review. When subagents are supported, delegate this focused review to a fresh subagent with the FULL authored document, this task, project root and baseline. Preserve its remit and require evidence. Collect its findings and return the required JSON yourself. Do not ask the subagent to recursively delegate. If subagents are unavailable, perform this focused review directly. Report findings only for this review type: test reviewers own test alignment, implementation reviewers own planned code, diagram reviewers own diagram conformance, and change reviewers own out-of-plan changes. Use other sections as evidence without duplicating their reviews. You may run relevant tests; distinguish execution outcomes from semantic assessment. Do not claim tests ran unless you ran them and saw their outcomes.\n\nProject root: %s\nBaseline: %s\nReview block: %s (%s)\n\nTask:\n%s\n\nAuthored document:\n%s\n\nGit status and tracked changes:\n%s\n\nInspect untracked files and any omitted diff/context yourself. For change-review, cover the entire repository, including changes within planned symbols, tests and non-Go files; naming a symbol in the plan does not approve every change to it. If baseline is none, historical change coverage is unavailable.\n\nReturn a final JSON object only: {\"summary\":\"short assessment\",\"findings\":[{\"status\":\"PASS|REVIEW|FAIL|UNKNOWN\",\"message\":\"specific evidence and limitations\",\"file\":\"path relative to project root\",\"line\":1}],\"test_execution\":\"commands and observed results, or not run\"}. Include source references for concerns. If evidence is insufficient, report UNKNOWN. Passing tests alone do not establish the stated behaviours."
+    (format "Independent design review. This conversation is dedicated to review, separate from the implementation conversation. Assess this task against the current supplied evidence; earlier turns are not proof that current code is correct. Do not edit project files or the Org document, and do not revise the plan to fit the code. Inspect the actual source and tests relevant to your assigned remit. The full document is shared context, not a request to perform every review. When subagents are supported, delegate this focused review to a fresh subagent with the FULL authored document, this task, project root and baseline. Preserve its remit and require evidence. Collect its findings and return the required JSON yourself. Do not ask the subagent to recursively delegate. If subagents are unavailable, perform this focused review directly. Report findings only for this review type: plan reviewers own their assigned freeform changes, test reviewers own test alignment, implementation reviewers own overall integration and context, diagram reviewers own diagram conformance, and change reviewers own out-of-plan changes. Use other sections as evidence without duplicating their reviews. You may run relevant tests; distinguish execution outcomes from semantic assessment. Do not claim tests ran unless you ran them and saw their outcomes.\n\nProject root: %s\nBaseline: %s\nReview block: %s (%s)\n\nTask:\n%s\n\nAuthored document:\n%s\n\nGit status and tracked changes:\n%s\n\nInspect untracked files and any omitted diff/context yourself. For change-review, cover the entire repository, including changes within planned symbols, tests and configuration files; naming a symbol in the plan does not approve every change to it. If baseline is none, historical change coverage is unavailable.\n\nReturn a final JSON object only: {\"summary\":\"short assessment\",\"findings\":[{\"status\":\"PASS|REVIEW|FAIL|UNKNOWN\",\"message\":\"specific evidence and limitations\",\"file\":\"path relative to project root\",\"line\":1}],\"test_execution\":\"commands and observed results, or not run\"}. Include source references for concerns. If evidence is insufficient, report UNKNOWN. Passing tests alone do not establish the stated behaviours."
             root baseline (plist-get block :id) (plist-get block :language)
             (concat (design-review--review-task (plist-get block :language)) "\n\n" (plist-get block :body)
                     (design-review--diagram-task block)
-                    (design-review--uncertainty-brief block document))
+                    (when (equal (plist-get block :language) "change-review")
+                      "\n\nFor each finding, include outside_plan as a JSON boolean. Set it to true only for an actual implementation change identified as outside the authored plan, with evidence explaining the mismatch. Use false for planned changes, baseline context, general observations, or uncertainty about whether a change is outside the plan. This classification is separate from PASS/REVIEW/FAIL/UNKNOWN; additional work is not automatically a defect.")
+                    )
             (or (plist-get document :authored-text) (design-review--authored-text))
             (cond ((null changes) "Unavailable: no pinned Git baseline.")
                   ((> (length changes) limit) (concat (substring changes 0 limit) "\n[TRUNCATED: inspect the remaining changes yourself]"))
@@ -141,6 +120,10 @@
   (let* ((text (string-trim (or (plist-get run :text) "")))
          (decoded (condition-case nil (design-review--json text) (error nil)))
          (document (plist-get run :document))
+         (plan-review (equal (plist-get run :language) "plan-review"))
+         (comparison (alist-get 'comparison decoded))
+         (has-comparison (and (stringp comparison)
+                              (not (string-blank-p comparison))))
          (shell (plist-get run :shell))
          (lines (list (design-review--stamp) "Independent agent assessment (advisory)."
                       (format "Conversation: [[design-session:%s][open review session]]"
@@ -155,24 +138,35 @@
         (setq lines (append lines '("UNKNOWN: reviewer did not return the required assessment format; inspect its conversation.")))
       (setq lines (append lines (list (design-review--text (alist-get 'summary decoded))
                                      (format "Test execution: %s" (design-review--text (alist-get 'test_execution decoded))))))
-      (when (equal (plist-get run :language) "implementation-review")
+      (when plan-review
+        (setq lines
+              (append lines
+                      (if has-comparison
+                          (cons "Plan versus implementation:"
+                                (mapcar (lambda (line) (concat ": " line))
+                                        (split-string comparison "\n")))
+                        '("UNKNOWN: reviewer omitted the Show Me comparison with the plan.")))))
+      (when (member (plist-get run :language) '("plan-review" "implementation-review"))
         (setf (plist-get run :outcome)
-              (cond ((and (equal (alist-get 'status decoded) "PASS")
+              (cond ((and plan-review (not has-comparison)) "UNKNOWN")
+                    ((and (equal (alist-get 'status decoded) "PASS")
+                          (> (length (alist-get 'findings decoded)) 0)
                           (seq-every-p (lambda (finding) (equal (alist-get 'status finding) "PASS"))
-                                       (alist-get 'findings decoded))
-                          (or (null (alist-get 'uncertainty_assessments decoded))
-                              (and (vectorp (alist-get 'uncertainty_assessments decoded))
-                                   (seq-every-p (lambda (entry) (and (listp entry) (equal (alist-get 'assessment entry) "checked_no_concern")))
-                                                (alist-get 'uncertainty_assessments decoded))))) "PASS")
+                                       (alist-get 'findings decoded))) "PASS")
                     ((member (alist-get 'status decoded) '("FAIL" "REVIEW" "UNKNOWN")) (alist-get 'status decoded))
                     (t "UNKNOWN")))
-        (setq lines (append lines (list (format "Implementation verdict: %s" (plist-get run :outcome))))))
+        (setq lines (append lines (list (format "Review verdict: %s" (plist-get run :outcome))))))
       (dolist (finding (append (alist-get 'findings decoded) nil))
         (let ((status (alist-get 'status finding)) (line (alist-get 'line finding)))
           (unless (member status '("PASS" "REVIEW" "FAIL" "UNKNOWN")) (setq status "UNKNOWN"))
           (setq lines (append lines (list (format "- %s%s: %s" status
-                                                 (if (alist-get 'diagram_id finding)
-                                                     (format " [%s]" (design-review--text (alist-get 'diagram_id finding))) "")
+                                                 (cond
+                                                  ((and (equal (plist-get run :language) "change-review")
+                                                        (eq (alist-get 'outside_plan finding) t))
+                                                   " [outside plan]")
+                                                  ((alist-get 'diagram_id finding)
+                                                   (format " [%s]" (design-review--text (alist-get 'diagram_id finding))))
+                                                  (t ""))
                                                  (design-review--text (alist-get 'message finding))))))
           (when-let* ((link (design-review--location-links document (alist-get 'file finding)
                                                           (if (and (integerp line) (> line 0)) line 1))))
@@ -280,8 +274,7 @@
   "Return nil when test RUN may start, WAITING, or an explicit blocking reason."
   (let* ((gate (plist-get (plist-get run :document) :test-gate))
          (implementations (plist-get gate :implementations)))
-    (cond ((not gate) "Run the document check to obtain graph and implementation prerequisites.")
-          ((plist-get gate :graph-blocker) (plist-get gate :graph-blocker))
+    (cond ((not gate) "Run the document check to obtain implementation prerequisites.")
           ((not implementations) "No implementation-review block is available.")
           ((not (design-review--run-current-p run)) "Source or plan changed; rerun the checks and implementation review.")
           ((seq-find (lambda (entry) (not (member (cdr entry) '("PASS" "PENDING")))) implementations)
@@ -295,21 +288,12 @@
   (unless validated (setq validated (design-review--require-valid document)))
   (when (and (equal (plist-get block :language) "test-review")
              (not (plist-get document :test-gate)))
-    (user-error "Run the document check before test reviews; graph and implementation prerequisites are required"))
-  (when (and (equal (plist-get block :language) "implementation-review")
-             (not (plist-member document :checks)))
+    (user-error "Run the document check before test reviews; implementation prerequisites are required"))
+  (unless (plist-get document :authored-text)
     (setf (plist-get document :path) buffer-file-name
-          (plist-get document :authored-text) (design-review--authored-text)
-          (plist-get document :fingerprint) (design-review--source-fingerprint
-                                           (append (list :path buffer-file-name :authored-text (design-review--authored-text)) document)))
-    (let (checks)
-      (dolist (graph (plist-get document :blocks))
-        (when (equal (plist-get graph :language) "design-graph")
-          (let ((request (alist-get (intern (plist-get graph :id)) (alist-get 'requests validated))))
-            (when (> (length (alist-get 'rules request)) 0)
-              (push `((id . ,(plist-get graph :id))
-                      (result . ,(design-review--tool (plist-get document :root) "check" request))) checks)))))
-      (setf (plist-get document :checks) (vconcat (nreverse checks)))))
+          (plist-get document :authored-text) (design-review--authored-text)))
+  (unless (plist-get document :fingerprint)
+    (setf (plist-get document :fingerprint) (design-review--source-fingerprint document)))
   (require 'agent-shell)
   (let* ((key (cons (current-buffer) (plist-get block :id)))
          (prompt (design-review--brief block document))
@@ -334,7 +318,7 @@
     (run-at-time 0 nil #'design-review--advance shell)
     (format "%s\n%s: queued in dedicated review conversation %s. Results will replace this drawer."
             (design-review--stamp)
-            (if (equal (plist-get block :language) "test-review") "WAITING for graph and implementation PASS" "RUNNING")
+            (if (equal (plist-get block :language) "test-review") "WAITING for implementation PASS" "RUNNING")
             (buffer-name shell))))
 
 (defun design-review--interrupt-queue ()
@@ -362,15 +346,18 @@
   (interactive)
   (let* ((block (design-review--block-at-point)) (document (design-review--document))
          (result (pcase (plist-get block :language)
-                   ("design-graph" (design-review--check-graph block document))
                    ("test-review" (design-review--prepare-test block))
                    (_ (design-review--start-review block document)))))
     (org-babel-insert-result result '("drawer" "replace"))
     result))
 
+(defun org-babel-execute:plan-review (_body _params)
+  "Assess this freeform plan box; never execute its body as code."
+  (design-review--start-review (design-review--block-at-point) (design-review--document)))
+
 (defun org-babel-execute:design-graph (_body _params)
-  "Check the named graph against current Go code."
-  (design-review--check-graph (design-review--block-at-point) (design-review--document)))
+  "Review a legacy graph as freeform intent; no deterministic checker is used."
+  (org-babel-execute:plan-review nil nil))
 
 (defun org-babel-execute:test-review (_body _params)
   "Check prerequisites before assessing planned tests."
@@ -380,7 +367,7 @@
   "Start background prerequisites and the requested test BLOCK."
   (require 'design-review-async)
   (let ((result (design-review--prepare "check" (plist-get block :id))))
-    (format "%s\n%s: graph and implementation checks must pass before test review.\n%s"
+    (format "%s\n%s: implementation assessment must pass before test review.\n%s"
             (design-review--stamp) (alist-get 'status result) (json-encode result))))
 
 (defun org-babel-execute:change-review (_body _params)

@@ -9,6 +9,19 @@
   (should (autoloadp (symbol-function 'org-babel-execute:design-graph)))
   (should (commandp (lookup-key emacs2-leader-map (kbd "a p")))))
 
+(ert-deftest emacs2-org-review-bindings-load-without-agent-workflow ()
+  (should-not (featurep 'agent-shell))
+  (with-temp-buffer
+    (org-mode)
+    (evil-local-mode 1)
+    (evil-normal-state)
+    (should (eq (key-binding (kbd "SPC m r")) #'design-review-check-block))
+    (should (eq (key-binding (kbd "SPC m R")) #'design-review-check-document))
+    (should (eq (key-binding (kbd "SPC m D c")) #'design-review-check-block)))
+  (should-not (featurep 'agent-shell))
+  (should (autoloadp (symbol-function 'design-review-create)))
+  (should (autoloadp (symbol-function 'org-babel-execute:plan-review))))
+
 (ert-deftest emacs2-project-trust-is-explicit-and-persisted ()
   (require 'flymake)
   (let* ((emacs2-projects-directory (make-temp-file "emacs2-trust-" t))
