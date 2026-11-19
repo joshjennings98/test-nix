@@ -48,11 +48,11 @@
           (plist-get document :fingerprint) (alist-get 'fingerprint result)
           (plist-get document :path) buffer-file-name
           (plist-get document :authored-text) (plist-get job :snapshot))
-    (let ((implementations
+    (let ((prerequisites
            (mapcar (lambda (block) (cons (plist-get block :id) "PENDING"))
-                   (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
+                   (seq-remove (lambda (block) (equal (plist-get block :language) "test-review"))
                                (plist-get job :blocks)))))
-      (setf (plist-get document :test-gate) (list :implementations implementations)))
+      (setf (plist-get document :test-gate) (list :prerequisites prerequisites)))
     (if (or (equal (plist-get job :command) "validate") (not (equal status "PASS")))
         (design-review--show-validation validation (plist-get job :source))
       (save-excursion
@@ -98,11 +98,11 @@ Validate once.  Git subprocesses run in the worker, never on the UI thread."
                          (design-review--document)))
              (blocks (if id (list (or (design-review--block id) (user-error "No review block %s" id)))
                        (plist-get document :blocks)))
-             (implementations (seq-filter (lambda (block) (equal (plist-get block :language) "implementation-review"))
+             (prerequisites (seq-remove (lambda (block) (equal (plist-get block :language) "test-review"))
                                           (if (seq-some (lambda (block) (equal (plist-get block :language) "test-review")) blocks)
                                               (plist-get document :blocks) blocks)))
-             (blocks (append implementations
-                             (seq-remove (lambda (block) (equal (plist-get block :language) "implementation-review")) blocks)))
+             (blocks (append prerequisites
+                             (seq-filter (lambda (block) (equal (plist-get block :language) "test-review")) blocks)))
              (job (list :status "RUNNING" :command command :buffer (current-buffer)
                         :source (or buffer-file-name (buffer-name)) :document document :blocks blocks
                         :snapshot (design-review--authored-text) :validation nil)))

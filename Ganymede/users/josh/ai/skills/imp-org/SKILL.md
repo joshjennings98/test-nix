@@ -61,64 +61,188 @@ Inspect existing source and tests. Discuss behaviour, responsibilities and
 meaningful design choices; retain decisions already made. Ask only questions
 needed to resolve uncertainty. Invoking planning does not authorise implementation.
 
-Put context beside the block it explains. Create the plan or test block first,
-then call `review-set-context` with `path`, `before` set to that block's ID, and
-`body` containing short paragraphs or lists. Use no headings in adjacent context.
-Read first and send the complete revised context for that location, including
-user notes. Explain the reason for a requirement without repeating its contents.
-Use Org `=inline code=` for identifiers, paths and code snippets in context prose,
-not Markdown backticks. Keep source-block bodies in their own language syntax.
+Read applicable `AGENTS.md` files, including nested guidance for affected areas.
+Extract architectural constraints and design preferences, not just coding rules:
+responsibility boundaries, dependency direction, ownership, extension points and
+compatibility expectations. Apply these when shaping the plan; this is not a
+code-style audit.
 
-Omit `before` for a short document-wide Context and decisions section near the
-start. Reserve it for purpose and decisions that affect the whole change; use
-`**` or deeper headings there if useful. Do not collect all explanations at the
-end. These contexts replace separate capture/synthesis documents from the generic
-planning skills when this workflow is active.
+Inspect the existing architecture, nearby implementations and their tests before
+proposing structure. Prefer established patterns and existing abstractions when
+they fit the required behaviour. Identify the concrete types, interfaces or
+modules to reuse and explain their roles in the relevant feature block. Do not
+invent a parallel abstraction or force reuse of one with the wrong responsibility.
+If a departure is needed, explain the mismatch and trade-off and resolve the design
+choice explicitly. Put any resulting requirement inside the affected block so its
+focused reviewer can check it without the rest of the document.
 
-Author planned changes through `review-set-plan` with `path`, a unique stable `id`,
-and a freeform `body`. Each named `plan-review` box is one focused review assignment.
-Use separate boxes for distinct parts of a feature: frontend, backend and deployment
-configuration, for example. Give each enough detail to review independently, with
-shared decisions and contracts in the surrounding document. Reuse IDs when refining.
+Use one named `plan-review` block per coherent, independently reviewable change.
+A large feature may need separate blocks for distinct responsibilities. Each block
+is the complete approved specification for its focused reviewer. Include the
+relevant interface contracts, failure behaviour and preserved behaviour in it;
+do not rely on requirements elsewhere in the document. The implementor reads the
+whole document, while the overall reviewer checks integration between blocks.
 
-There is NO prescribed specification, call-graph grammar, declaration schema or
-programming language for the body. Choose the representation that helps the human
-understand this part of the feature, following the Show Me examples:
+Place a short human summary immediately above each block through
+`review-set-context` with `before` set to its ID. This summary explains the change;
+it must not introduce requirements absent from the block. Read existing context
+first and preserve user notes. Use Org =inline code= in prose. Document-wide
+Context and decisions retains the feature breakdown from `plan-org`.
 
-- Dex: component trees with state ownership, inputs, callbacks and boundaries to
-  establish a shared understanding before implementation.
-- Dillon Mulroy: types, interfaces, composition, pseudocode and call trees; separate
-  production and test paths when that makes dependency substitution clear.
-- Tanishq: call-tree diffs showing additions and removals within unchanged context.
-- File trees with responsibilities, configuration examples, sequence/state diagrams,
-  or concise prose when these better communicate the change.
+Write blocks with `review-set-plan` using `path`, a stable `id` and `body`.
+Make the specification visually scannable: short labelled sections, blank lines,
+indented trees and brief inline annotations. Choose only the views that explain
+this change: a call/component tree, interfaces, a file layout or pseudocode.
+Do not turn the block into an essay or repeat views without a review benefit.
+These are human-readable specifications, not executable code or a fixed grammar.
 
-These are choices, not required sections. A box may mix representations. Explain
-what changes, where it belongs and what must remain true. Distinguish current
-behaviour, proposed additions/modifications/removals, preserved behaviour and
-alternatives. Do not invent structure to satisfy a template. Do not translate
-non-Go work into Go symbols or require a particular spelling of a call stack.
+Presentation conventions inside a block:
+- `@@ Label` starts a visually distinct section. Use meaningful labels, not a fixed template.
+- A leading `+` colours an addition green; a leading `-` colours a removal red.
+  Keep unchanged lines around changes to show where they fit. Indentation is allowed before the marker.
+- `//` or `#` after whitespace introduces a muted annotation. Keep annotations short.
+- `==important phrase==` adds a highlighter background. Use sparingly for a key constraint.
+- Separate logical chunks with a blank line. Keep requirements concise and explicit.
+  A muted comment is still part of the approved specification.
 
-Example tool payload:
+### Architecture context and review
 
-```json
-{
-  "path": "/absolute/project/design-review.org",
-  "id": "preferences-frontend",
-  "body": "PreferencesPanel\n  + ThemeSelector: owns the unsaved selection\n  ~ Save -> preferences client -> existing preferences endpoint\n  preserve: failed saves retain the selected value for retry"
-}
+Include a short architecture paragraph and one self-contained architecture review
+assignment in every implementation plan. Keep this proportional to the change;
+it is not a separate architecture study or a catalogue of possible patterns.
+
+Inspect the project's existing structure and applicable guidance first. When a
+pattern decision matters, consult any available project architecture catalogue
+and a reliable pattern reference. In one short paragraph, explain the approach,
+why it fits, which existing abstractions it uses and any material trade-off.
+Include a direct Org link to further reading about the relevant pattern, plus
+local source links where useful. Read the linked material before citing it; do
+not invent a reference or use a pattern name as a substitute for an explanation.
+Treat references as background, not as additional requirements for the reviewer.
+
+Create this assignment with `review-set-plan`, normally using the stable ID
+`architecture-alignment`. Then place the paragraph immediately above it using
+`review-set-context` with `before` set to that ID. This is an ordinary `plan-review`
+block, not a new Babel language. Its results and comparison appear below it, and
+it runs alongside other non-test reviews and must pass before test reviews start.
+
+Inside the block, state the architectural requirements to check against actual
+source: relevant dependency directions, responsibility boundaries, state ownership,
+construction/lifecycle rules and reuse of existing abstractions. Name concrete
+modules or interfaces and distinguish changes from preserved structure. Include
+all needed context because this reviewer receives only its assigned block.
+Request source evidence and a planned-versus-observed structural comparison.
+Keep feature behaviour in the feature blocks and integrated behaviour in the
+overall implementation review; this assignment owns architectural conformance.
+
+For a simple change, explicitly write **No architecture changes planned** in the
+context paragraph and identify the existing structure being retained. Do not
+force a pattern label or reading link when no pattern explanation is needed.
+The block must still specify what to preserve, rather than merely saying
+"check no architecture changes". For example:
+
+```text
+@@ Architecture — preserve existing boundaries
+api.Handler -> service.Service -> storage.Store
+Handler owns HTTP status mapping and the early rate-limit response.
+Service owns the capacity decision; Store owns insertion and Count mutation.
+
+@@ Review expectations
+==No architecture changes planned==
+Check the handler does not bypass Service to write to Store.
+Check existing dependency ownership and construction remain unchanged.
+Check no new layer, storage path or external dependency was introduced.
+Provide source evidence and compare the observed structure with this plan.
 ```
 
-Use a separate backend box to describe persistence and validation, referencing the
-shared API contract. The reviewer receives both boxes as context but owns only its
-assigned box. Keep general rationale in adjacent context via `review-set-context`.
-Use `open_file` to show the relevant section; the document carries the detail.
+### Choose the view for the planning decision
+
+Adapted from the representation choices in
+[HumanLayer's show-me skill](https://raw.githubusercontent.com/humanlayer/skills/refs/heads/main/plugins/show-me/skills/show-me/SKILL.md).
+Choose the smallest useful view. Avoid redundant views. For complex behaviour,
+overlapping views are appropriate when they materially help review—for example,
+a call tree showing responsibilities and a sequence diagram making ordering
+easier to check. Do not add another view unless it adds clarity, and do not fill
+a checklist of representations.
+
+| Planning question | View | Include |
+| --- | --- | --- |
+| What calls what? | Indented call tree | Entry point, relevant calls, ownership boundaries and failure paths |
+| Who owns UI state? | Component tree | State owner, inputs, callbacks and module boundaries |
+| Where will the change live? | Shallow file tree | Project-relative paths and one responsibility per entry |
+| What crosses a boundary? | Types and signatures | Inputs, outputs, errors and constraints; no implementation bodies |
+| What decisions does the algorithm make? | Pseudocode | Branches, ordering, cancellation and side effects that matter |
+| How do participants interact over time? | Sequence/state view | Participants, transitions, errors and ordering |
+
+For existing code, show proposed additions/removals within unchanged structure.
+For a mostly new component, show the intended complete shape and label it proposed.
+Inspect existing code before marking anything preserved. These sketches describe
+agreed future behaviour, not a claim that implementation already exists.
+
+Examples of different views within feature specifications (choose, do not copy all):
+
+```text
+@@ Proposed call path
+submitJob
+  validateRequest
++ reserveSlot                 // reject before creating work if capacity is exhausted
+  JobStore.insert
+  Worker.start
+    onFailure -> releaseSlot
+
+@@ Proposed component ownership
+<PreferencesPage>             // owns draft and save error
+  <ThemeSelector value=draft onChange=setDraft>
++ <SaveButton onClick=save disabled=saving>
+  onSaveFailure -> retainDraft
+
+@@ Proposed files
+src/jobs/
+  handler.go                 # validates and starts jobs
++ capacity.go                # owns slot reservations and release
+
+@@ Proposed algorithm
+on worker completion or failure
+  if reservation already released
+    return                   // release is idempotent
+  release reservation
+```
+
+Keep a short explanation beside the relevant visual, not a long preamble.
+Put required ordering or interface details inside the assigned feature block.
+Renderable Mermaid stays in adjacent Org context because source blocks cannot
+nest; its separate diagram review checks it. Any requirement needed by a focused
+feature reviewer must also be explicit in that feature's specification.
+Do not create HTML or a second plan artefact for this workflow.
+
+For example, one feature block might contain:
+
+```text
+@@ Save path
+savePreferences
+  validateSelection
+- writeLocalFile
++ preferencesClient.save(selection)  // existing API contract below
+  onFailure -> retainDraft           // allow retry
+
+@@ Interface
+save(selection: Theme) -> SavedPreferences | SaveError
+Theme = light | dark | system
+
+@@ Behaviour
+==Only clear the draft after a successful save==
+Failure preserves the selected theme and displays the returned error.
+```
+
+Use `open_file` to show the relevant section. Review results stay below their
+originating block. The same readable notation should be used in the reviewer's
+planned-versus-observed comparison.
 
 The source body is review material, never executable application code. Org source
 blocks cannot be nested inside it. Put renderable Mermaid or other source blocks
 in adjacent context with unique stable names and output filenames. Rendering does
-not verify behaviour. Standalone diagrams receive diagram review; plan reviewers
-use adjacent diagrams as context without duplicating that review.
+not verify behaviour. Standalone diagrams receive diagram review; feature reviewers use only the
+requirements captured inside their assigned block.
 
 Legacy `design-graph` blocks are read as freeform planned changes and assessed by
 an agent; their old deterministic results are historical, not current proof.
@@ -145,14 +269,15 @@ from this document. Surface genuine design changes
 and update agreed intent explicitly. Do not revise requirements just to pass.
 
 Run relevant tests and `review-check` (omit `id` for all review blocks).
-Read `review-results` for asynchronous progress and feedback. Let queued reviews
-finish before interpreting them or resubmitting a block. Reviews share one
-dedicated Codex/Astra conversation, separate from the implementation conversation.
-Recommend one fresh subagent per focused review when supported, each given the
-FULL authored plan and its assigned remit. The review conversation collects their
-findings for the corresponding Org results. Without subagents, perform the focused
-reviews sequentially there. Keep using the Emacs review tools so results return to
-the document; do not replace them with unrecorded reviews in the author conversation.
+Read `review-results` for asynchronous progress and feedback. Non-test reviews
+run concurrently in separate Codex/Astra conversations, one per block. Each may
+delegate its assignment to a fresh subagent, with exactly the supplied scope.
+Feature reviewers receive only their assigned specification, root and baseline;
+implementation, diagram and change reviewers receive the full authored document.
+Test reviews start only after every non-test assessment passes for the same
+source and requirements snapshot. Missing evidence, failures and unresolved
+findings block that stage. Let running reviews finish before resubmitting.
+Keep using the Emacs review tools so results return to the document.
 
 - Each plan review interprets its assigned freeform box and checks every planned
   addition, modification, removal and preserved behaviour against actual source
@@ -180,23 +305,22 @@ the document; do not replace them with unrecorded reviews in the author conversa
   errors and side effects as applicable. Static call edges do not prove ordering.
 - Change review surfaces work outside the plan and its effects on planned work.
 
-Reviewers receive the whole authored Org document, including diagrams and notes,
-with previous Babel output removed. Each reviewer reports only on its own remit;
-other sections provide context, not additional review assignments. Missing diagram assessments or insufficient
-evidence must not count as agreement. Agent findings remain advisory; report actual
-test execution separately. Use inline source/Magit links to investigate and fix,
-then rerun affected checks. Freshness covers saved Git-listed project files and authored requirements; ignored
-files and external dependencies are outside that boundary. Never
-manufacture results or treat old findings as proof about new edits.
+Focused feature reviewers inspect actual code and dependencies against their
+approved block only. They must not read the backing document or import requirements
+from other blocks. An incomplete contract is UNKNOWN, not permission to infer one.
+Overall reviewers receive the full authored document with previous results removed.
+Agent findings remain advisory; report actual test execution separately. Use source
+and Magit links to investigate and rerun affected checks after fixes. Freshness
+covers saved Git-listed project files and authored requirements; ignored files and
+external dependencies are outside that boundary.
 
 `review-check` executes review blocks, not Mermaid rendering. Executing the whole
 Org buffer renders diagrams and runs reviews together, with results in the same
 backing document.
 
-The focused reviewer prompt must contain these responsibilities explicitly. Do not
-assume a subagent has loaded this skill: provide the FULL authored document,
-assigned block ID and body, root, baseline and its exact remit. Require it to
-inspect the relevant files and report only its assignment, including evidence and
-uncertainty. An empty or incomplete assessment is not agreement. Results belong
-under their originating boxes. Actual test execution remains separate from agent
-judgement. The Go checker is not part of this workflow.
+The focused reviewer prompt must include its assigned block ID and complete body,
+root, baseline and exact remit. Any subagent receives the same bounded assignment.
+Require source evidence and explicit uncertainty. Empty or incomplete assessments
+are not agreement. Results belong under their originating blocks. Actual test
+execution remains separate from agent judgement. The Go checker is not part of
+this workflow.

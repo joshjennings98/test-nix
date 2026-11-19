@@ -71,5 +71,6 @@
   (autoload (intern (format "org-babel-execute:%s" language)) "emacs2-agent-setup")
   (with-eval-after-load 'org
     (unless (eq language 'design-graph)
-      (add-to-list 'org-src-lang-modes (cons (symbol-name language) 'text)))))
+      (add-to-list 'org-src-lang-modes (cons (symbol-name language)
+                                             (if (eq language 'plan-review) 'design-review-plan 'text))))))
 (autoload 'org-babel-execute:mermaid "emacs2-agent-setup")

@@ -1,4 +1,7 @@
 {
   "htmlLabels": false,
-  "flowchart": { "htmlLabels": false }
+  "flowchart": {
+    "htmlLabels": false
+  },
+  "theme": "dark"
 }

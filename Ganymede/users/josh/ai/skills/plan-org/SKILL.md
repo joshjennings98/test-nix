@@ -7,6 +7,8 @@ Interview me relentlessly about every aspect of this feature until we reach a sh
 
 Read relevant files, docs, and recent commits. Understand the current state. Find facts yourself rather than asking the user for information you can look up.
 
+Read applicable `AGENTS.md` files and relevant codebase context to determine what not to ask: avoid questions already answered by explicit project guidance or facts you can establish yourself. This is preparation for feature discovery, not a source of feature requirements or an invitation to discuss architecture. Do not infer desired behaviour from the current implementation, treat existing limitations as agreed scope, or ask the user to choose patterns or abstractions. Keep discovery focused on the user's purpose and desired behaviour. Raise a project constraint only when it creates a concrete conflict or ambiguity that affects those answers; otherwise retain technical observations for implementation planning.
+
 You will notice things during this phase — potential approaches, patterns, problems. That's fine. But recognise that these observations are formed without the user's input. They are starting points for questions, not conclusions.
 
 If you notice something useful from the exploration during the discussion with the user (for example an existing retry pattern or helper that could be reused based on a discussion about retries), make a note of it for use by an implementor later. Whether the insight is useful will be decided in a later phase. These insights should not be surfaced to the user unless they change the product discussion itself — for example, if the requested functionality already exists in another form, conflicts with current behaviour, or exposes a constraint the user must account for.

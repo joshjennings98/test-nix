@@ -20,4 +20,30 @@
                          '((design-review--match-unplanned-finding
                             (0 'design-review-unplanned-face prepend))) 'append))
 (add-hook 'org-mode-hook #'design-review--fontify-results)
+
+(defface design-review-added-face '((t (:foreground "#8ec07c")))
+  "Added plan lines." :group 'org)
+(defface design-review-removed-face '((t (:foreground "#fb4934")))
+  "Removed plan lines." :group 'org)
+(defface design-review-comment-face '((t (:inherit shadow)))
+  "Explanatory annotations within a plan." :group 'org)
+(defface design-review-marker-face '((t (:background "#fabd2f" :foreground "#282828")))
+  "Selected words emphasised with ==markers==." :group 'org)
+(defface design-review-section-face '((t (:inherit font-lock-function-name-face :weight bold)))
+  "Short section labels within a feature plan." :group 'org)
+
+(define-derived-mode design-review-plan-mode text-mode "Feature plan"
+  "Readable review specifications; bodies are never application code.
+Use @@ labels, leading + or - changes, // or # annotations and ==emphasis==."
+  (setq-local font-lock-defaults
+              '((("^[ \t]*[+].*$" (0 'design-review-added-face))
+                 ("^[ \t]*-.*$" (0 'design-review-removed-face))
+                 ("^[ \t]*@@ .*$" (0 'design-review-section-face t))
+                 ("\\(?:^\\|[ \t]\\)\\(//.*\\|#.*\\)$" (1 'design-review-comment-face t))
+                 ("==\\([^=\n]+\\)==" (0 'design-review-marker-face prepend))) t)))
+
+(with-eval-after-load 'org
+  (setf (alist-get "plan-review" org-src-lang-modes nil nil #'equal) 'design-review-plan)
+  (setf (alist-get "design-graph" org-src-lang-modes nil nil #'equal) 'design-review-plan))
+
 (provide 'design-review-fontification)

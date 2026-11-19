@@ -2,7 +2,7 @@
 
 * Plan across languages
 
-The workflow uses one Org document and a dedicated Agent Shell review conversation.
+The workflow uses one Org document and separate Agent Shell review conversations per block.
 Elisp validates document structure and unique IDs. No Go tool or compiler is needed.
 
 Use =review-create= to pin a Git baseline, =review-read= to read the live document,
@@ -21,8 +21,9 @@ application code; Babel dispatches them to the reviewer.
 
 =validate-document= checks structure only. =review-check= queues reviews for one
 ID or the whole document. =review-results= returns progress and result drawers.
-Each focused plan reviewer receives the full authored plan but assesses only its
-assigned box. It must inspect actual code/configuration and give evidence for
+Each focused plan reviewer receives only its complete assigned specification.
+It must not import requirements from other boxes. The implementor and overall
+reviewers receive the full document. It must inspect actual code/configuration and give evidence for
 additions, changes, removals and preserved behaviour, regardless of language or
 notation. Each plan review also shows a multiline Show Me comparison of the plan
 with the observed implementation, alongside findings and source links. It can use
@@ -32,8 +33,8 @@ Matching context stays visible; aligned work shows the checked structure with no
 differences reported. Missing evidence or an omitted comparison is UNKNOWN.
 
 The overall implementation reviewer assesses integration, edge cases and shared
-context. Test reviewers assess expectations after the overall implementation
-assessment passes. Diagram reviewers assess rendered-diagram intent; change
+context. Non-test reviews run concurrently. Test reviewers assess expectations only after
+all non-test assessments pass for the same snapshot. Diagram reviewers assess rendered-diagram intent; change
 reviewers identify work outside the plan. Agent judgements are advisory and are
 separate from actual test execution. Results include source/diff navigation.
 
@@ -49,3 +50,15 @@ historical evidence. Convert a box with =review-set-plan= using the same ID and
 preserved body; this clears that box's old result. Multiple legacy boxes can be
 converted independently. Reconnect the Emacs navigation MCP connection after
 loading the updated configuration to discover =review-set-plan=.
+
+* Readable feature specifications
+
+Each box contains the full approved contract for one coherent change, including
+interfaces, failure behaviour and preserved behaviour. A short human summary
+sits above it; results appear below. Split distinct responsibilities into separate
+boxes. Within each box, use short =@@ Label= sections and blank lines rather than
+long prose. Trees, signatures and pseudocode can share a box when each adds value.
+
+Leading =+= lines are green and =-= lines red. Whitespace-separated =//= and =#=
+annotations are muted, including on changed lines. ===marked text=== has a highlighter
+background. These are presentation conventions, not an executable grammar.
