@@ -1,0 +1,51 @@
+[[language]]
+name = "go"
+rulers = [120]
+auto-format = true
+language-servers = [ "gopls", "golangci-lint-lsp" ]
+
+[language-server.gopls.config.hints]
+assignVariableTypes = true
+compositeLiteralFields = true
+constantValues = true
+functionTypeParameters = true
+parameterNames = true
+rangeVariableTypes = true
+
+[language-server.golangci-lint-lsp.config] # temporary since this isn't in mainline release yet
+command = ["golangci-lint", "run", "--output.json.path=stdout", "--show-stats=false", "--issues-exit-code=1"]
+
+[[language]]
+name = "python"
+rulers = [80, 120]
+auto-format = true
+language-servers = ["pyright"]
+roots = [".", "Pipfile"]
+
+[language.formatter]
+command = "black"
+args = ["-", "--quiet"]
+
+# https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+[language-server.pyright]
+command = "pyright-langserver"
+args = ["--stdio"]
+
+[language-server.pyright.config]
+reportMissingTypeStubs = false
+
+[language-server.pyright.config.python.analysis]
+typeCheckingMode = "basic"
+autoImportCompletions = true
+
+[[language]]
+name = "bash" # will need 'shellcheck' as well as the language server
+auto-format = true
+
+[[language]]
+name = "yaml"
+auto-format = true
+
+# https://github.com/redhat-developer/yaml-language-server#using-yamlschemas-settings
+[language-server.yaml-language-server.config.yaml.schemas]
+kubernetes = ["*.k8s.yaml", "charts/*.yaml"]

@@ -1,0 +1,3 @@
+# Enforce these being created on a per system basis
+Ganymede/nixos/hardware-configuration.nix
+Ganymede/nixos/disko.nix

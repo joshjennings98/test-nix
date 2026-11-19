@@ -1,0 +1,51 @@
+#+title: Org design review
+
+* Plan across languages
+
+The workflow uses one Org document and a dedicated Agent Shell review conversation.
+Elisp validates document structure and unique IDs. No Go tool or compiler is needed.
+
+Use =review-create= to pin a Git baseline, =review-read= to read the live document,
+and =review-set-plan= with =path=, =id= and =body= to add or refine a freeform box.
+Separate distinct parts such as frontend, backend and configuration into their own
+named boxes. Choose component trees, call-tree diffs, signatures, pseudocode, file
+trees, diagrams or prose according to the feature. There is no call-graph grammar.
+Make current behaviour, proposed changes and preserved behaviour clear.
+
+=review-set-context= places rationale or renderable diagrams beside a box.
+=review-set-tests= retains one named test and its expectations per test-review box.
+Source delimiters cannot be nested inside review bodies. Bodies are never run as
+application code; Babel dispatches them to the reviewer.
+
+* Review
+
+=validate-document= checks structure only. =review-check= queues reviews for one
+ID or the whole document. =review-results= returns progress and result drawers.
+Each focused plan reviewer receives the full authored plan but assesses only its
+assigned box. It must inspect actual code/configuration and give evidence for
+additions, changes, removals and preserved behaviour, regardless of language or
+notation. Each plan review also shows a multiline Show Me comparison of the plan
+with the observed implementation, alongside findings and source links. It can use
+an annotated tree, pseudocode diff, configuration comparison or labelled views.
+It distinguishes missing work, deviations, equivalent implementation and uncertainty.
+Matching context stays visible; aligned work shows the checked structure with no
+differences reported. Missing evidence or an omitted comparison is UNKNOWN.
+
+The overall implementation reviewer assesses integration, edge cases and shared
+context. Test reviewers assess expectations after the overall implementation
+assessment passes. Diagram reviewers assess rendered-diagram intent; change
+reviewers identify work outside the plan. Agent judgements are advisory and are
+separate from actual test execution. Results include source/diff navigation.
+
+Freshness uses saved Git-listed files and authored requirements. Ignored files and
+external dependencies are outside the snapshot. Edits invalidate evidence; rerun
+reviews after changes. Late answers do not overwrite edited or removed boxes.
+
+* Existing documents
+
+Legacy =design-graph= boxes are interpreted as freeform plans and reviewed by an
+agent, without invoking the removed Go tool. Old deterministic results are only
+historical evidence. Convert a box with =review-set-plan= using the same ID and
+preserved body; this clears that box's old result. Multiple legacy boxes can be
+converted independently. Reconnect the Emacs navigation MCP connection after
+loading the updated configuration to discover =review-set-plan=.
