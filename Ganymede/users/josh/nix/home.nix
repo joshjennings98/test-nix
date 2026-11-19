@@ -202,6 +202,7 @@ in
     enable = true;
     enableMcpIntegration = true;
     context = builtins.readFile "${ai}/AGENTS.md";
+    skills.plan-org = "${ai}/skills/plan-org/SKILL.md";
     skills.imp-org = "${ai}/skills/imp-org/SKILL.md";
   };
 

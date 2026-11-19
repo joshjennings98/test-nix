@@ -36,6 +36,12 @@ are tool payloads, not instructions to edit a file.
 
 ## Start or resume
 
+When continuing from [plan-org](../plan-org/SKILL.md), reuse its live backing
+document and settled feature breakdown. Do not restart feature discovery, create
+a second document or require a separate synthesis step. Read the user's latest
+answers and open deferrals before planning the implementation. Reopen a feature
+decision only when a concrete conflict or missing requirement needs resolution.
+
 Discover the connected Emacs tools (their server prefix can vary). Use
 `list_buffers` and project files to find an existing review. Prefer the document
 the user names or has open. Read it with `review-read`: the live buffer can contain
