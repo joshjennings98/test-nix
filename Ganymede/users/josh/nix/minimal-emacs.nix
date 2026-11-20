@@ -1,7 +1,13 @@
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   home.packages = [
+    (import ./minimal-emacs-package.nix { inherit pkgs; })
     pkgs.iosevka
     pkgs.clojure
     pkgs.jdk
@@ -9,10 +15,16 @@
   fonts.fontconfig.enable = true;
   home.persistence."/persist".directories = [ ".local/state/emacs2" ];
 
-  xdg.desktopEntries.emacs2 = {
-    name = "emacs2";
+  home.file.".agents/skills".source = ../ai/skills;
+
+  home.activation.createEmacsOrgDirectory = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    $DRY_RUN_CMD mkdir -p "${config.home.homeDirectory}/Documents/org"
+  '';
+
+  xdg.desktopEntries.emacs = {
+    name = "Emacs";
     genericName = "Text Editor";
-    exec = "emacs2 %F";
+    exec = "emacs %F";
     icon = "emacs";
     terminal = false;
     categories = [

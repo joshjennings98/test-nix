@@ -1,18 +1,16 @@
-#+title: Agent Shell and design reviews in emacs2
+#+title: Agent Shell and design reviews in minimal-emacs
 
 * Scope and implementation
 
-The full Doom agent workflow is available in emacs2: inline prompts and replies,
+The agent workflow in minimal-emacs provides: inline prompts and replies,
 manual permission review, completion notifications, bounded tool previews,
 editor navigation through MCP, and the Org design-review workflow with
 background checks and reviewer sessions. Design review is core to this setup.
 
-The existing implementation remains in =configs/doom/= and is shared by both
-editors. The emacs2 Nix build copies only the selected extension libraries and
-Mermaid configuration into its immutable runtime directory. It does not load
-Doom itself, its configuration or its keybinding macros. Licences and source
-attribution remain in the shared extension files. Changes to those shared files
-affect both editors; the emacs2 bindings live separately here.
+The extension libraries, Mermaid configuration, tests and documentation live
+in =configs/minimal-emacs/agent/=. The Nix package copies the runtime libraries
+into its immutable configuration directory. Licences and source attribution
+remain in the extension files.
 
 =agents.el= registers lazy commands and Babel entry points.
 =emacs2-agent-setup.el= loads the workflow on first use.
@@ -27,10 +25,10 @@ Normal editor startup does not start an agent, connect MCP or send a request.
 | Magit, Transient, Mermaid mode and ob-mermaid | Locked Nix Emacs package set |
 | codex-acp, Go, curl, mermaid-cli, socat and desktop tools | Locked Nix packages |
 | rhblind/emacs-mcp-server | Explicit Nix build; absent from the locked Emacs package set |
-| Inline UI, permission UI, notifications, output limits and navigation | Vendored Lisp in configs/doom |
-| Design review | Local Elisp sources in configs/doom |
+| Inline UI, permission UI, notifications, output limits and navigation | Vendored Lisp in configs/minimal-emacs/agent |
+| Design review | Local Elisp sources in configs/minimal-emacs/agent |
 
-The MCP server exception is declared in =nix/overlays/emacs2-agent-packages.nix=:
+The MCP server exception is declared in =nix/minimal-emacs-agent-packages.nix=:
 version 0.7.0, commit =a5d749cf9880598f66308545985526fd4460627f=, with a fixed
 source hash. Everything is installed by Nix. Emacs does not fetch packages at
 runtime. Updating =flake.lock= controls the packaged dependencies; run the
@@ -72,8 +70,8 @@ prompt, =RET= inserts a newline in insert state; =Esc :wq RET= sends the draft.
 Permission requests require an explicit review action and do not steal editing
 keys. The existing confirmed, session-scoped bypass command is retained.
 
-The detailed behaviour is documented in =configs/doom/docs/inline.md= and
-=configs/doom/docs/design-review.org=. The existing imp-org agent
+The detailed behaviour is documented in =configs/minimal-emacs/agent/docs/inline.md= and
+=configs/minimal-emacs/agent/docs/design-review.org=. The existing imp-org agent
 skill is shared too. Authentication uses the normal Codex setup.
 
 * State and appearance
@@ -90,17 +88,17 @@ applies to displayed tool previews and Emacs transcripts, not agent tool results
 
 * Verification
 
-The emacs2 overlay exposes =tests.startup= and =tests.agents=. The latter runs
+The package in =nix/minimal-emacs-package.nix= exposes =tests.startup= and =tests.agents=. The latter runs
 the existing offline permission, inline, scrolling, notification, output-limit,
 navigation and design-review suites, plus checks for emacs2's bindings and state
 locations. It uses a deterministic local ACP server, not a paid provider.
-The Go checker is built with its own Go tests. GUI-specific scrolling checks
+GUI-specific scrolling checks
 require a graphical Emacs session in addition to the batch checks.
 
 Unresolved design findings now carry navigable deterministic context. The
 implementation reviewer can record a separate, cited agent assessment without
 changing UNKNOWN into PASS. Source freshness is checked independently; see
-=configs/doom/docs/design-review.org= for the snapshot boundary and refresh rules.
+=configs/minimal-emacs/agent/docs/design-review.org= for the snapshot boundary and refresh rules.
 
 * Inline sessions and retained replies
 

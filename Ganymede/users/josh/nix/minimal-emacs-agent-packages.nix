@@ -1,7 +1,7 @@
 { emacsPackages }:
 
 # Agent Shell, ACP and Shell Maker come from the locked Emacs package set.
-# This MCP server is not packaged there; match the source used by Doom.
+# This MCP server is not packaged there; pin its source explicitly.
 emacsPackages.overrideScope (
   final: _prev: {
     mcp-server = final.trivialBuild {

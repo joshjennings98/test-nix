@@ -1,13 +1,12 @@
-#+title: emacs2 in the Ganymede template
+#+title: minimal-emacs in the Ganymede template
 
-This is the standalone, Nix-managed minimal-emacs.d configuration, alongside
-the existing Doom setup. Run =emacs2= from a shell or select it in the launcher.
-Its desktop entry is also named =emacs2=.
+This is the standalone, Nix-managed minimal-emacs.d configuration.
+Run =emacs= from a shell or select Emacs in the launcher.
 
 Agent Shell and the complete Org design-review workflow are included. See
 =agents.org= for the bindings, package sources, persisted state and tests.
-The extension libraries and Go checker are shared with =configs/doom/=; the
-emacs2 build includes them without loading Doom itself.
+The extension libraries, tests and documentation live in
+=configs/minimal-emacs/agent/=.
 
 * Template integration
 
@@ -16,11 +15,11 @@ root of the installed configuration after =nix flake init -t ...#Ganymede=.
 All configuration and test references are relative to that template root.
 Nothing depends on the original machine's checkout or Nix store paths.
 
-- =users/josh/nix/overlays/emacs2.nix= pins minimal-emacs.d, installs Emacs
+- =users/josh/nix/minimal-emacs-package.nix= pins minimal-emacs.d, installs Emacs
   packages through Nix, supplies language tools and builds the startup checks.
-- =users/josh/nix/minimal-emacs.nix= supplies fonts, the desktop entry and
+- =users/josh/nix/minimal-emacs.nix= installs the executable, fonts, skills, desktop entry and
   persistence for editor state.
-- =users/josh/nix/home.nix= enables the overlay, module and executable.
+- =users/josh/nix/home.nix= imports the minimal-emacs module.
 - =users/josh/configs/minimal-emacs/*.el= contains the editor settings.
 - =users/josh/tests/emacs2-startup.el= exercises the configured editor.
 
@@ -53,10 +52,10 @@ nix build --impure --expr '
       system = builtins.currentSystem;
       overlays = [
         f.inputs.emacs-overlay.overlays.default
-        (import ./users/josh/nix/overlays/emacs2.nix)
       ];
     };
-  in [ pkgs.emacs2 pkgs.emacs2.tests.startup pkgs.emacs2.tests.agents ]
+    emacs = import ./users/josh/nix/minimal-emacs-package.nix { inherit pkgs; };
+  in [ emacs emacs.tests.startup emacs.tests.agents ]
 ' --no-link --print-out-paths
 #+end_src
 

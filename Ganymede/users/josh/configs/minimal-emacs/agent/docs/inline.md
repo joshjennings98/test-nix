@@ -253,7 +253,7 @@ Run it with the Nix-built editor's `--batch`, a writable `XDG_CACHE_HOME`, and
 `AGENT_SHELL_TEST_PYTHON` pointing to Python 3:
 
 ```sh
-emacs --batch -l users/josh/configs/doom/tests/permissions.el -f ert-run-tests-batch-and-exit
+emacs --batch -l users/josh/configs/minimal-emacs/agent/tests/permissions.el -f ert-run-tests-batch-and-exit
 ```
 
 These tests do not contact a provider. The interactive Doom startup checks also
