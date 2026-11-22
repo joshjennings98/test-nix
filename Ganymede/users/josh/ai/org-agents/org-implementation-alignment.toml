@@ -9,8 +9,9 @@ configuration. For a focused plan block, use only its supplied requirements and
 keep the review within that block. Give positive evidence for each assessed change
 and preserved behaviour, and compare the plan with the observed implementation.
 Accept equivalent implementations that satisfy the contract. For an overall
-implementation or diagram assignment, assess only the integration or diagram
-behaviour identified in the brief, including relevant ordering and failure paths.
+implementation assignment, assess integration and review the change for defects
+and regressions as directed by the brief. For a diagram assignment, assess the
+behaviour identified in the diagram, including relevant ordering and failure paths.
 
 Cite source locations, state where evidence is incomplete, and report deviations
 within the assigned scope. Leave project files and the Org document untouched.

@@ -304,8 +304,9 @@ Keep using the Emacs review tools so results return to the document.
 - Each test review assesses its named test against the block's expectations.
   Other tests in the document provide context, not duplicate review assignments.
 - Implementation review owns overall behaviour, integration between the planned
-  parts, edge cases and document-wide context. It does not duplicate individual
-  plan-box assessments.
+  parts, edge cases and document-wide context. Its Org block also reviews the
+  changed code and affected callers for defects and regressions using available
+  code-review skills.
 - Diagram review explicitly assesses every diagram: participants, order, branches,
   errors and side effects as applicable. Static call edges do not prove ordering.
 - Change review surfaces work outside the plan and its effects on planned work.
@@ -325,7 +326,8 @@ backing document.
 
 The focused reviewer prompt must include its assigned block ID and complete body,
 root, baseline and exact remit. Any subagent receives the same bounded assignment.
-Require source evidence and explicit uncertainty. Empty or incomplete assessments
-are not agreement. Results belong under their originating blocks. Actual test
-execution remains separate from agent judgement. The Go checker is not part of
-this workflow.
+Require source evidence and explicit uncertainty. A complete review with no
+findings can return PASS with an empty findings list. It still needs a summary of
+what was checked and any required plan comparison or diagram assessments.
+Results belong under their originating blocks. Actual test execution remains
+separate from agent judgement. The Go checker is not part of this workflow.

@@ -225,7 +225,7 @@
 
 (ert-deftest josh/review-test-submission-requires-feature-pass ()
   (require 'agent-shell)
-  (dolist (case '(("PASS" "PASS" t) ("FAIL" "FAIL" nil) ("UNKNOWN" "UNKNOWN" nil)
+  (dolist (case '(("PASS" nil t) ("PASS" "PASS" t) ("FAIL" "FAIL" nil) ("UNKNOWN" "UNKNOWN" nil)
                   ("REVIEW" "REVIEW" nil) (nil "PASS" nil) ("PASS" "REVIEW" nil)
                   ("malformed" "PASS" nil) ("cancelled" "PASS" nil) ("stale" "PASS" nil)
                   ("plan-edited" "PASS" nil)))
@@ -255,7 +255,9 @@
                     (if (equal (car case) "malformed") "not JSON"
                       (json-encode `((status . ,(if (member (car case) '("stale" "plan-edited")) "PASS" (car case)))
                                      (summary . "Fixture") (test_execution . "not run")
-                                     (findings . [((status . ,(cadr case)) (message . "Evidence"))])))))
+                                     (findings . ,(if-let* ((status (cadr case)))
+                                                      (vector `((status . ,status) (message . "Evidence")))
+                                                    []))))))
               (let ((text (if (equal (car case) "cancelled") "UNKNOWN: cancelled"
                             (design-review--review-result implementation))))
                 (when (equal (car case) "stale")
@@ -266,7 +268,9 @@
                 (design-review--finish (plist-get implementation :key) implementation text))
               (design-review--submit (plist-get test :key) test)
               (should (eq (not (null sent)) (nth 2 case)))
-              (unless sent (should (string-match-p "BLOCKED: test review not run" (buffer-string)))))
+              (if sent
+                  (should (string-match-p "Review verdict: PASS" (buffer-string)))
+                (should (string-match-p "BLOCKED: test review not run" (buffer-string)))))
           (remhash (plist-get implementation :key) design-review--runs)
           (remhash (plist-get test :key) design-review--runs)
           (kill-buffer shell))))))
@@ -328,10 +332,13 @@
         (save-restriction
           (narrow-to-region (line-beginning-position) (point-max))
           (should (string-match-p "Handler->>Store: Save" (design-review--authored-text))))
-        (let* ((reply '((summary . "Done") (findings . []) (test_execution . "not run")))
-               (run (list :shell (current-buffer) :document document :diagrams '("save-sequence")
+        (let* ((reply '((status . "PASS") (summary . "Done") (findings . []) (test_execution . "not run")))
+               (run (list :shell (current-buffer) :document document :language "diagram-review"
+                          :diagrams '("save-sequence")
                           :text (json-encode reply))))
-          (should (string-match-p "UNKNOWN \\[save-sequence\\]" (design-review--review-result run)))
+          (let ((result (design-review--review-result run)))
+            (should (string-match-p "Review verdict: UNKNOWN" result))
+            (should (string-match-p "UNKNOWN \\[save-sequence\\]" result)))
           (setf (alist-get 'findings reply)
                 [((diagram_id . "save-sequence") (status . "FAIL") (message . "Save happens before validation"))])
           (setf (plist-get run :text) (json-encode reply))
@@ -366,7 +373,12 @@
         (pcase-let ((`(,id ,agent ,remit) entry))
           (let ((brief (design-review--brief (design-review--block id) document)))
             (should (string-match-p (regexp-quote (format "named subagent %s is available" agent)) brief))
-            (should (string-match-p (regexp-quote remit) brief))))))))
+            (should (string-match-p (regexp-quote remit) brief))
+            (if (equal id "planned-implementation")
+                (progn
+                  (should (string-match-p (regexp-quote "$review-agent") brief))
+                  (should (string-match-p "affected callers for concrete defects and regressions" brief)))
+              (should-not (string-match-p (regexp-quote "$review-agent") brief)))))))))
 
 (ert-deftest josh/review-adjacent-context-and-separate-test-results ()
   (josh/with-review
@@ -546,12 +558,14 @@
         (org-babel-execute-src-block))
       (should (equal assigned "freeform")))))
 
-(ert-deftest josh/review-plan-empty-assessment-is-unknown ()
+(ert-deftest josh/review-test-block-displays-pass-without-findings ()
   (josh/with-review
-    (let ((run (list :shell (current-buffer) :language "plan-review" :outcome "UNKNOWN"
+    (let ((run (list :shell (current-buffer) :language "test-review" :outcome "UNKNOWN"
                      :document (design-review--document)
-                     :text "{\"status\":\"PASS\",\"summary\":\"Fine\",\"findings\":[],\"test_execution\":\"not run\"}")))
-      (should (string-match-p "Review verdict: UNKNOWN" (design-review--review-result run))))))
+                     :text "{\"status\":\"PASS\",\"summary\":\"Checked the assertions\",\"findings\":[],\"test_execution\":\"not run\"}")))
+      (let ((result (design-review--review-result run)))
+        (should (string-match-p "Review verdict: PASS" result))
+        (should (string-match-p "Test execution: not run" result))))))
 
 (ert-deftest josh/review-background-preparation-discards-edited-plan ()
   (josh/with-review
@@ -588,7 +602,7 @@
                        :document (design-review--document)
                        :text (json-encode `((status . "PASS") (summary . "Aligned")
                                             (comparison . ,comparison) (test_execution . "not run")
-                                            (findings . [((status . "PASS") (message . "Checked app.ts:2"))]))))))
+                                            (findings . []))))))
         (design-review--review-result run)
         (should (equal (plist-get run :outcome)
                        (if (and comparison (not (string-blank-p comparison))) "PASS" "UNKNOWN")))))))
