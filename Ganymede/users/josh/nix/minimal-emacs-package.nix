@@ -1,6 +1,37 @@
-{ pkgs }:
+{ pkgs, codexPackage }:
 
 let
+  codexExe = pkgs.lib.getExe codexPackage;
+  orgSkillDefaults = (builtins.fromTOML (builtins.readFile ../ai/org-skill-defaults.toml)).skills.config;
+  orgSkillRules = pkgs.lib.concatMapStringsSep ", " (
+    skill: "{ name = ${builtins.toJSON skill.name}, enabled = true }"
+  ) orgSkillDefaults;
+  # Planning runs in interactive Agent Shell sessions with the Emacs MCP server.
+  emacsCodex = pkgs.writeShellScript "emacs-codex" ''
+    exec ${pkgs.lib.escapeShellArg codexExe} "$@" -c ${pkgs.lib.escapeShellArg "skills.config=[${orgSkillRules}]"}
+  '';
+  # Keep Org roles outside the auto-discovered agents directory.
+  orgAgentDirectory = ../ai/org-agents;
+  orgAgentFiles = builtins.filter (pkgs.lib.hasSuffix ".toml") (
+    builtins.attrNames (builtins.readDir orgAgentDirectory)
+  );
+  orgAgentOverrides = pkgs.lib.concatMap (
+    filename:
+    let
+      path = orgAgentDirectory + "/${filename}";
+      agent = builtins.fromTOML (builtins.readFile path);
+    in
+    [
+      "-c"
+      "agents.${agent.name}.description=${builtins.toJSON agent.description}"
+      "-c"
+      "agents.${agent.name}.config_file=${builtins.toJSON "${path}"}"
+    ]
+  ) orgAgentFiles;
+  # ACP starts Codex app-server, which accepts -c overrides but rejects --profile.
+  orgReviewCodex = pkgs.writeShellScript "org-review-codex" ''
+    exec ${pkgs.lib.escapeShellArg codexExe} "$@" ${pkgs.lib.escapeShellArgs orgAgentOverrides}
+  '';
   emacsPackage = pkgs.emacs-unstable.overrideAttrs (old: {
     src = old.src.override {
       url = "https://github.com/emacs-mirror/emacs.git";
@@ -146,6 +177,9 @@ pkgs.writeShellApplication {
     prettier
   ];
   text = ''
+    export CODEX_PATH=${pkgs.lib.escapeShellArg codexExe}
+    export EMACS_CODEX_PATH=${pkgs.lib.escapeShellArg emacsCodex}
+    export EMACS_ORG_REVIEW_CODEX_PATH=${pkgs.lib.escapeShellArg orgReviewCodex}
     exec ${emacs}/bin/emacs --init-directory=${emacsConfig} "$@"
   '';
   passthru = {

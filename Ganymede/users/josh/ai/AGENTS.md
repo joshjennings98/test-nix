@@ -2,6 +2,12 @@
 
 Use British English where possible. If a keyword or library function requires American English then that is acceptable but anything you define should be using British English.
 
+## Code review
+
+After implementing code changes and running the relevant checks, ask the `code-reviewer` subagent to independently review the changes you made. Wait for its findings, address confirmed issues within scope, and rerun affected checks before reporting completion. The implementation conversation owns this step, including when the work was planned in Org.
+
+Use an `org-*` reviewer only when a dedicated Emacs Org review brief names it and supplies its block ID and assignment.
+
 ## Go
 
 Note, all logical chunks should have spacing between them. This is things like if statements and for loops etc.

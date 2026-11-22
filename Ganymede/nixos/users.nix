@@ -3,6 +3,9 @@
   imports = [
     inputs.home-manager.nixosModules.home-manager # Import home-manager's NixOS module
   ];
+
+  # Keep these defaults separate from the writable per-user Codex configuration.
+  environment.etc."codex/config.toml".source = ../users/josh/ai/org-skill-defaults.toml;
   
   home-manager = {
     extraSpecialArgs = { 

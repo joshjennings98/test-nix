@@ -4,6 +4,7 @@
 (require 'design-review-evidence)
 
 (defvar agent-shell--state)
+(defvar agent-shell-openai-codex-environment)
 (declare-function agent-shell--new-shell "agent-shell")
 (declare-function agent-shell-subscribe-to "agent-shell")
 (declare-function agent-shell-unsubscribe "agent-shell")
@@ -17,7 +18,7 @@
 (declare-function magit-current-section "magit-section")
 
 (defcustom design-review-agent-config nil
-  "Review configuration override.  Nil uses Codex with Astra."
+  "Review configuration override.  Nil uses Codex with Sol at low reasoning effort."
   :type '(choice (const nil) sexp) :group 'design-review)
 
 (defvar-local design-review--session nil
@@ -27,10 +28,29 @@
   "Review runs queued in this dedicated Agent Shell buffer.")
 
 (defun design-review--default-agent-config ()
-  "Return a Codex configuration with Astra selected explicitly."
+  "Return the Codex configuration for a dedicated Org review."
   (require 'agent-shell-openai)
-  (let ((config (agent-shell-openai-make-codex-config)))
-    (setf (alist-get :default-model-id config) (lambda () "gpt-6-astra"))
+  (let* ((config (agent-shell-openai-make-codex-config))
+         (default-options (alist-get :default-config-options config))
+         (client-maker (alist-get :client-maker config)))
+    (setf (alist-get :default-model-id config) (lambda () "gpt-6.2-sol")
+          (alist-get :default-config-options config)
+          (lambda ()
+            (let ((options (copy-alist (funcall default-options))))
+              (setf (alist-get "reasoning_effort" options nil nil #'equal) "low")
+              options)))
+    ;; Override CODEX_PATH only for the dedicated review's ACP client.
+    (when-let* ((review-codex (getenv "EMACS_ORG_REVIEW_CODEX_PATH")))
+      (setf (alist-get :client-maker config)
+            (lambda (buffer)
+              (let ((agent-shell-openai-codex-environment
+                     (cons (concat "CODEX_PATH=" review-codex)
+                           (seq-remove (lambda (entry)
+                                         (if (stringp entry)
+                                             (string-prefix-p "CODEX_PATH=" entry)
+                                           (equal (car entry) "CODEX_PATH")))
+                                       agent-shell-openai-codex-environment))))
+                (funcall client-maker buffer)))))
     config))
 
 (defun design-review--review-task (language)
@@ -93,6 +113,14 @@
     (format "\n\nExplicit diagram review: %s. For EACH listed diagram, return at least one finding with diagram_id equal to its ID, a status, evidence and limitations. Read the complete authored diagram and its surrounding notes; distinguish agreed intent, existing behaviour and alternatives. Check participants, ordering, branches, errors, state transitions and side effects against implementation as applicable. Static call edges do not establish runtime ordering. Inspect linked images if accessible; otherwise report UNKNOWN. Rendering is not verification. Also identify any diagrams in prose or other formats and assess them explicitly."
             (json-encode (vconcat (design-review--diagrams))))))
 
+(defun design-review--review-agent (language)
+  "Return the named Codex subagent for review LANGUAGE."
+  (pcase language
+    ("test-review" "org-test-reviewer")
+    ("change-review" "org-implementation-misalignment")
+    ((or "plan-review" "implementation-review" "diagram-review")
+     "org-implementation-alignment")))
+
 (defun design-review--brief (block document)
   "Build a bounded review brief from the authored document and Git changes."
   (let* ((root (plist-get document :root))
@@ -103,7 +131,8 @@
                     (concat (design-review--git root "status" "--short" "--untracked-files=all") "\n"
                             (design-review--git root "diff" "--no-ext-diff" "--no-textconv" baseline "--")))))
          (limit 60000))
-    (format "Independent design review. This conversation is dedicated to review, separate from the implementation conversation. Assess this task against the current supplied evidence; earlier turns are not proof that current code is correct. Do not edit project files or the Org document, and do not revise the plan to fit the code. Inspect the actual source and tests relevant to your assigned remit. The supplied specification defines your assignment. Feature reviews receive only their approved box; overall reviews receive the authored document. When subagents are supported, delegate this focused review to a fresh subagent with exactly the supplied specification, this task, project root and baseline. Preserve its remit and require evidence. Collect its findings and return the required JSON yourself. Do not ask the subagent to recursively delegate. If subagents are unavailable, perform this focused review directly. Report findings only for this review type: plan reviewers own their assigned freeform changes, test reviewers own test alignment, implementation reviewers own overall integration and context, diagram reviewers own diagram conformance, and change reviewers own out-of-plan changes. Use only the supplied specification as requirements; inspect source as evidence. You may run relevant tests; distinguish execution outcomes from semantic assessment. Do not claim tests ran unless you ran them and saw their outcomes.\n\nProject root: %s\nBaseline: %s\nReview block: %s (%s)\n\nTask:\n%s\n\nSupplied specification:\n%s\n\nGit status and tracked changes:\n%s\n\nInspect untracked files and any omitted diff/context yourself. For change-review, cover the entire repository, including changes within planned symbols, tests and configuration files; naming a symbol in the plan does not approve every change to it. If baseline is none, historical change coverage is unavailable.\n\nReturn an explicit top-level status PASS, FAIL, REVIEW or UNKNOWN. PASS requires positive source evidence and no unresolved findings. Return a final JSON object only: {\"status\":\"PASS|FAIL|REVIEW|UNKNOWN\",\"summary\":\"short assessment\",\"findings\":[{\"status\":\"PASS|REVIEW|FAIL|UNKNOWN\",\"message\":\"specific evidence and limitations\",\"file\":\"path relative to project root\",\"line\":1}],\"test_execution\":\"commands and observed results, or not run\"}. Include source references for concerns. If evidence is insufficient, report UNKNOWN. Passing tests alone do not establish the stated behaviours."
+    (format "Independent design review. This conversation is dedicated to review, separate from the implementation conversation. Assess this task against the current supplied evidence; earlier turns are not proof that current code is correct. Do not edit project files or the Org document, and do not revise the plan to fit the code. Inspect the actual source and tests relevant to your assigned remit. The supplied specification defines your assignment. Feature reviews receive only their approved box; overall reviews receive the authored document. When the named subagent %s is available, delegate this review to a fresh instance of it with exactly the supplied specification, this task, project root and baseline. Preserve its remit and require evidence. Collect its findings and return the required JSON yourself. Do not ask the subagent to recursively delegate. If the named subagent is unavailable, perform this review directly. Report findings only for this review type: plan reviewers own their assigned freeform changes, test reviewers own test alignment, implementation reviewers own overall integration and context, diagram reviewers own diagram conformance, and change reviewers own out-of-plan changes. Use only the supplied specification as requirements; inspect source as evidence. You may run relevant tests; distinguish execution outcomes from semantic assessment. Do not claim tests ran unless you ran them and saw their outcomes.\n\nProject root: %s\nBaseline: %s\nReview block: %s (%s)\n\nTask:\n%s\n\nSupplied specification:\n%s\n\nGit status and tracked changes:\n%s\n\nInspect untracked files and any omitted diff/context yourself. For change-review, cover the entire repository, including changes within planned symbols, tests and configuration files; naming a symbol in the plan does not approve every change to it. If baseline is none, historical change coverage is unavailable.\n\nReturn an explicit top-level status PASS, FAIL, REVIEW or UNKNOWN. PASS requires positive source evidence and no unresolved findings. Return a final JSON object only: {\"status\":\"PASS|FAIL|REVIEW|UNKNOWN\",\"summary\":\"short assessment\",\"findings\":[{\"status\":\"PASS|REVIEW|FAIL|UNKNOWN\",\"message\":\"specific evidence and limitations\",\"file\":\"path relative to project root\",\"line\":1}],\"test_execution\":\"commands and observed results, or not run\"}. Include source references for concerns. If evidence is insufficient, report UNKNOWN. Passing tests alone do not establish the stated behaviours."
+            (design-review--review-agent (plist-get block :language))
             root baseline (plist-get block :id) (plist-get block :language)
             (concat (design-review--review-task (plist-get block :language)) "\n\n" (plist-get block :body)
                     (design-review--diagram-task block)

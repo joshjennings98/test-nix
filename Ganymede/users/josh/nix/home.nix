@@ -198,10 +198,16 @@ in
 
   programs.codex = {
     enable = true;
+    package = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
     enableMcpIntegration = true;
     context = builtins.readFile "${ai}/AGENTS.md";
     skills.plan-org = "${ai}/skills/plan-org/SKILL.md";
     skills.imp-org = "${ai}/skills/imp-org/SKILL.md";
+  };
+
+  home.file.".codex/agents" = {
+    source = ai + "/agents";
+    recursive = true;
   };
 
   programs.mpv.enable = true;

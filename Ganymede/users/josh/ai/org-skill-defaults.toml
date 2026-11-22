@@ -1,0 +1,8 @@
+# The Emacs Agent Shell launcher enables these planning skills for its sessions.
+[[skills.config]]
+name = "plan-org"
+enabled = false
+
+[[skills.config]]
+name = "imp-org"
+enabled = false

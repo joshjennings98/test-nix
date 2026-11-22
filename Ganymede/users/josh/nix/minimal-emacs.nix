@@ -7,7 +7,10 @@
 
 {
   home.packages = [
-    (import ./minimal-emacs-package.nix { inherit pkgs; })
+    (import ./minimal-emacs-package.nix {
+      inherit pkgs;
+      codexPackage = config.programs.codex.package;
+    })
     pkgs.iosevka
     pkgs.clojure
     pkgs.jdk

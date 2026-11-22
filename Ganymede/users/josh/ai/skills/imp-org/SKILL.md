@@ -270,8 +270,13 @@ and update agreed intent explicitly. Do not revise requirements just to pass.
 
 Run relevant tests and `review-check` (omit `id` for all review blocks).
 Read `review-results` for asynchronous progress and feedback. Non-test reviews
-run concurrently in separate Codex/Astra conversations, one per block. Each may
-delegate its assignment to a fresh subagent, with exactly the supplied scope.
+run concurrently in separate Codex review conversations, one per block. The
+Emacs review launcher registers the Org reviewers for those conversations.
+Each review conversation uses the named subagent for its block when available.
+Plan, implementation and diagram reviews use =org-implementation-alignment=.
+Change reviews use =org-implementation-misalignment= and test reviews use
+=org-test-reviewer=. The review conversation passes the supplied assignment and
+returns the assessment in the format Emacs expects.
 Feature reviewers receive only their assigned specification, root and baseline;
 implementation, diagram and change reviewers receive the full authored document.
 Test reviews start only after every non-test assessment passes for the same

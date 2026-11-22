@@ -24,9 +24,14 @@
     directory))
 
 (setq agent-shell-preferred-agent-config 'codex
+      agent-shell-openai-default-model-id "gpt-6.2-sol"
       agent-shell-inhibit-system-sleep nil
       agent-shell-dot-subdir-function #'emacs2-agent-project-directory
       shell-maker-root-path (expand-file-name "agent-shell/" emacs2-state-directory))
+(setf (alist-get "reasoning_effort" agent-shell-openai-default-config-options nil nil #'equal)
+      "medium")
+(when-let* ((codex-path (getenv "EMACS_CODEX_PATH")))
+  (add-to-list 'agent-shell-openai-codex-environment (concat "CODEX_PATH=" codex-path)))
 (advice-add 'agent-shell-cache-dir :override #'emacs2-agent-cache-directory)
 (agent-shell-permission-transient-mode 1)
 (add-to-list 'agent-shell-mcp-servers

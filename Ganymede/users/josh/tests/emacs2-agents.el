@@ -49,7 +49,12 @@
   (should agent-shell-permission-transient-mode)
   (should-not agent-shell-inhibit-system-sleep)
   (should (file-exists-p ob-mermaid-default-config-file))
-  (should (eq agent-shell-preferred-agent-config 'codex)))
+  (should (eq agent-shell-preferred-agent-config 'codex))
+  (let ((config (agent-shell-openai-make-codex-config)))
+    (should (equal (funcall (alist-get :default-model-id config)) "gpt-6.2-sol"))
+    (should (equal (alist-get "reasoning_effort" (funcall (alist-get :default-config-options config))
+                              nil nil #'equal)
+                   "medium"))))
 
 (ert-deftest emacs2-inline-session-and-preview-shortcuts ()
   (dolist (binding '(("L" . agent-shell-inline-continue-session)
